@@ -9,6 +9,11 @@ export type ModelInfo = {
   value: string;
   label: string;
   supportsVision?: boolean;
+  provider?: string;
+  description?: string;
+  contextWindow?: number;
+  inputTypes?: string[];
+  supportsReasoning?: boolean;
 };
 
 type OpenRouterModel = {
@@ -26,6 +31,8 @@ type OpenRouterModel = {
     input_modalities?: string[]; // e.g., ["text", "image", "file"]
     output_modalities?: string[];
   };
+  supported_parameters?: string[];
+  reasoning?: object;
 };
 
 /**
@@ -68,10 +75,19 @@ export async function fetchOpenRouterModels(apiKey?: string): Promise<ModelInfo[
       })
       .map((model) => {
         const isFree = model.id.includes(':free');
+        const provider = model.id.split('/')[0] || 'OpenRouter';
         return {
           value: model.id,
           label: isFree ? `${model.name} (Free)` : model.name,
           supportsVision: true,
+          provider,
+          description: model.description,
+          contextWindow: model.context_length,
+          inputTypes: model.architecture?.input_modalities,
+          supportsReasoning:
+            Boolean(model.reasoning) ||
+            (model.supported_parameters?.includes('reasoning') ?? false) ||
+            (model.supported_parameters?.includes('include_reasoning') ?? false),
         };
       })
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -120,6 +136,7 @@ export async function fetchOpenAIModels(apiKey?: string): Promise<ModelInfo[]> {
         value: model.id,
         label: model.id.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
         supportsVision: true,
+        provider: 'OpenAI',
       }))
       .sort((a: ModelInfo, b: ModelInfo) => a.label.localeCompare(b.label));
 
@@ -178,6 +195,12 @@ export async function fetchGeminiModels(apiKey?: string): Promise<ModelInfo[]> {
           value: modelId,
           label: displayName,
           supportsVision: true,
+          provider: 'Google',
+          description: model.description,
+          contextWindow: model.inputTokenLimit,
+          inputTypes: ['text', 'image'],
+          supportsReasoning:
+            /(^|[.-])2\.5|gemini-3|thinking/i.test(modelId),
         };
       })
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -197,17 +220,17 @@ export async function fetchGeminiModels(apiKey?: string): Promise<ModelInfo[]> {
  */
 function getFallbackOpenRouterModels(): ModelInfo[] {
   return [
-    { value: 'openrouter/polaris-alpha', label: 'Polaris Alpha (Free)', supportsVision: true },
-    { value: 'nvidia/nemotron-nano-12b-v2-vl:free', label: 'Nemotron Nano 12B VL (Free)', supportsVision: true },
-    { value: 'qwen/qwen2.5-vl-32b-instruct:free', label: 'Qwen 2.5 VL 32B Instruct (Free)', supportsVision: true },
-    { value: 'google/gemini-2.0-flash-exp:free', label: 'Gemini 2.0 Flash Exp (Free)', supportsVision: true },
-    { value: 'mistralai/mistral-small-3.2-24b-instruct:free', label: 'Mistral Small 3.2 24B Instruct (Free)', supportsVision: true },
-    { value: 'meta-llama/llama-4-maverick:free', label: 'Llama 4 Maverick (Free)', supportsVision: true },
-    { value: 'meta-llama/llama-4-scout:free', label: 'Llama 4 Scout (Free)', supportsVision: true },
-    { value: 'mistralai/mistral-small-3.1-24b-instruct:free', label: 'Mistral Small 3.1 24B Instruct (Free)', supportsVision: true },
-    { value: 'google/gemma-3-4b-it:free', label: 'Gemma 3 4B IT (Free)', supportsVision: true },
-    { value: 'google/gemma-3-12b-it:free', label: 'Gemma 3 12B IT (Free)', supportsVision: true },
-    { value: 'google/gemma-3-27b-it:free', label: 'Gemma 3 27B IT (Free)', supportsVision: true },
+    { value: 'openrouter/polaris-alpha', label: 'Polaris Alpha (Free)', supportsVision: true, provider: 'OpenRouter', contextWindow: 1_048_576, inputTypes: ['text', 'image'], supportsReasoning: true },
+    { value: 'nvidia/nemotron-nano-12b-v2-vl:free', label: 'Nemotron Nano 12B VL (Free)', supportsVision: true, provider: 'NVIDIA', contextWindow: 131_072, inputTypes: ['text', 'image'] },
+    { value: 'qwen/qwen2.5-vl-32b-instruct:free', label: 'Qwen 2.5 VL 32B Instruct (Free)', supportsVision: true, provider: 'Qwen', contextWindow: 32_768, inputTypes: ['text', 'image'] },
+    { value: 'google/gemini-2.0-flash-exp:free', label: 'Gemini 2.0 Flash Exp (Free)', supportsVision: true, provider: 'Google', contextWindow: 1_048_576, inputTypes: ['text', 'image'], supportsReasoning: true },
+    { value: 'mistralai/mistral-small-3.2-24b-instruct:free', label: 'Mistral Small 3.2 24B Instruct (Free)', supportsVision: true, provider: 'Mistral', contextWindow: 131_072, inputTypes: ['text', 'image'] },
+    { value: 'meta-llama/llama-4-maverick:free', label: 'Llama 4 Maverick (Free)', supportsVision: true, provider: 'Meta Llama', contextWindow: 1_048_576, inputTypes: ['text', 'image'], supportsReasoning: true },
+    { value: 'meta-llama/llama-4-scout:free', label: 'Llama 4 Scout (Free)', supportsVision: true, provider: 'Meta Llama', contextWindow: 10_000_000, inputTypes: ['text', 'image'], supportsReasoning: true },
+    { value: 'mistralai/mistral-small-3.1-24b-instruct:free', label: 'Mistral Small 3.1 24B Instruct (Free)', supportsVision: true, provider: 'Mistral', contextWindow: 131_072, inputTypes: ['text', 'image'] },
+    { value: 'google/gemma-3-4b-it:free', label: 'Gemma 3 4B IT (Free)', supportsVision: true, provider: 'Google', contextWindow: 131_072, inputTypes: ['text', 'image'], supportsReasoning: true },
+    { value: 'google/gemma-3-12b-it:free', label: 'Gemma 3 12B IT (Free)', supportsVision: true, provider: 'Google', contextWindow: 131_072, inputTypes: ['text', 'image'], supportsReasoning: true },
+    { value: 'google/gemma-3-27b-it:free', label: 'Gemma 3 27B IT (Free)', supportsVision: true, provider: 'Google', contextWindow: 131_072, inputTypes: ['text', 'image'], supportsReasoning: true },
   ];
 }
 
@@ -216,9 +239,9 @@ function getFallbackOpenRouterModels(): ModelInfo[] {
  */
 function getFallbackOpenAIModels(): ModelInfo[] {
   return [
-    { value: 'gpt-4o', label: 'GPT-4o', supportsVision: true },
-    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', supportsVision: true },
-    { value: 'gpt-4-vision-preview', label: 'GPT-4 Vision Preview', supportsVision: true },
+    { value: 'gpt-4o', label: 'GPT-4o', supportsVision: true, provider: 'OpenAI', contextWindow: 128_000, inputTypes: ['text', 'image'] },
+    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', supportsVision: true, provider: 'OpenAI', contextWindow: 128_000, inputTypes: ['text', 'image'] },
+    { value: 'gpt-4-vision-preview', label: 'GPT-4 Vision Preview', supportsVision: true, provider: 'OpenAI', contextWindow: 128_000, inputTypes: ['text', 'image'] },
   ];
 }
 
@@ -227,9 +250,9 @@ function getFallbackOpenAIModels(): ModelInfo[] {
  */
 function getFallbackGeminiModels(): ModelInfo[] {
   return [
-    { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite', supportsVision: true },
-    { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro', supportsVision: true },
-    { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash nai', supportsVision: true },
+    { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite', supportsVision: true, provider: 'Google', contextWindow: 1_048_576, inputTypes: ['text', 'image'] },
+    { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro', supportsVision: true, provider: 'Google', contextWindow: 2_097_152, inputTypes: ['text', 'image'] },
+    { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash nai', supportsVision: true, provider: 'Google', contextWindow: 1_048_576, inputTypes: ['text', 'image'] },
   ];
 }
 
@@ -272,6 +295,8 @@ export async function fetchLocalModels(baseUrl?: string): Promise<ModelInfo[]> {
         value: model.id,
         label: model.display_name || model.filename || model.id,
         supportsVision: true,
+        provider: 'Local AI',
+        inputTypes: ['text', 'image'],
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
 
@@ -290,9 +315,9 @@ export async function fetchLocalModels(baseUrl?: string): Promise<ModelInfo[]> {
  */
 function getFallbackLocalModels(): ModelInfo[] {
   return [
-    { value: 'llama3-vision', label: 'Llama 3 Vision', supportsVision: true },
-    { value: 'qwen2-vl', label: 'Qwen2 VL', supportsVision: true },
-    { value: 'phi3-vision', label: 'Phi-3 Vision', supportsVision: true },
+    { value: 'llama3-vision', label: 'Llama 3 Vision', supportsVision: true, provider: 'Local AI', inputTypes: ['text', 'image'] },
+    { value: 'qwen2-vl', label: 'Qwen2 VL', supportsVision: true, provider: 'Local AI', inputTypes: ['text', 'image'] },
+    { value: 'phi3-vision', label: 'Phi-3 Vision', supportsVision: true, provider: 'Local AI', inputTypes: ['text', 'image'] },
   ];
 }
 

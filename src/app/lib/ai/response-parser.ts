@@ -33,29 +33,53 @@ export const extractTextFromResponse = (response: any): string => {
 };
 
 /**
+ * Normalizes a raw AI response by stripping markdown code fences
+ * and surrounding whitespace so the JSON object can be located reliably.
+ * @param text - The raw AI response text
+ * @returns The cleaned text
+ */
+export const cleanAIResponse = (text: string): string => {
+  let cleaned = text.trim();
+
+  // Remove leading ```json / ``` fences
+  cleaned = cleaned.replace(/^```(?:json)?\s*/i, '');
+  // Remove trailing ``` fence
+  cleaned = cleaned.replace(/\s*```$/i, '');
+
+  return cleaned.trim();
+};
+
+/**
  * Extracts JSON from a text string that may contain additional content
  * @param text - The text containing JSON
  * @returns The extracted JSON string or null if not found
  */
 export const extractJsonFromText = (text: string): string | null => {
-  const jsonStart = text.indexOf('{');
-  const jsonEnd = text.lastIndexOf('}');
+  const cleaned = cleanAIResponse(text);
+  const jsonStart = cleaned.indexOf('{');
+  const jsonEnd = cleaned.lastIndexOf('}');
 
-  if (jsonStart !== -1 && jsonEnd !== -1) {
-    return text.slice(jsonStart, jsonEnd + 1);
+  if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+    return cleaned.slice(jsonStart, jsonEnd + 1);
   }
 
   return null;
 };
 
 /**
- * Validates that the parsed metadata meets quality standards
+ * Validates that the parsed metadata matches the expected schema
  * @param metadata - The parsed metadata object
  * @throws Error if validation fails
  */
 export const validateMetadata = (metadata: any): void => {
-  const title = String(metadata.title || '').trim();
-  const description = String(metadata.description || '').trim();
+  if (!metadata || typeof metadata !== 'object') {
+    console.error('❌ Parsed value is not an object:', metadata);
+    throw new Error('AI returned invalid metadata (not an object)');
+  }
+
+  const title = String(metadata.title ?? '').trim();
+  const description = String(metadata.description ?? '').trim();
+  const keywords = String(metadata.keywords ?? '').trim();
 
   if (!title || title.length < 5) {
     console.error('❌ Title too short or empty:', title);
@@ -65,6 +89,11 @@ export const validateMetadata = (metadata: any): void => {
   if (!description || description.length < 10) {
     console.error('❌ Description too short or empty:', description);
     throw new Error('AI returned invalid description (too short)');
+  }
+
+  if (!keywords) {
+    console.error('❌ Keywords empty or missing:', keywords);
+    throw new Error('AI returned invalid keywords (missing or empty)');
   }
 };
 
@@ -114,24 +143,38 @@ export const applyLimits = (
 
 /**
  * Parses AI response text and extracts validated metadata
- * @param response - The raw AI API response
+ * Checks finish reason BEFORE attempting any JSON parsing so truncated
+ * responses are never misreported as malformed JSON.
+ * @param text - The raw AI response text
+ * @param finishReason - Optional finish reason from the API (e.g. 'length', 'stop')
  * @param limits - Optional limits to apply to the metadata
  * @returns The parsed and validated metadata
- * @throws Error if parsing or validation fails
+ * @throws Error with a distinct message for truncation, empty, malformed, or schema failure
  */
 export const parseMetadataResponse = (
-  response: any,
+  text: string,
+  finishReason?: string,
   limits?: MetadataLimits
 ): ParsedMetadata => {
-  // Extract text from response
-  const text = extractTextFromResponse(response);
+  // 1. Truncation is a first-class condition, checked before parsing
+  if (finishReason === 'length') {
+    console.warn('✂️ AI response was truncated (finish_reason: length)');
+    throw new Error('AI response was truncated');
+  }
+
+  // 2. Empty response
+  if (!text || !text.trim()) {
+    console.error('❌ AI returned an empty response');
+    throw new Error('AI returned an empty response');
+  }
+
   console.log('AI Response text:', text);
 
-  // Extract JSON from text
+  // 3. Locate the JSON object within the response
   const jsonStr = extractJsonFromText(text);
 
   if (!jsonStr) {
-    console.error('❌ No JSON found in AI response');
+    console.error('❌ No JSON object found in AI response');
     console.error('📄 Full response text (first 500 chars):', text.substring(0, 500));
 
     // Check if it's an HTML error response
@@ -144,24 +187,26 @@ export const parseMetadataResponse = (
       throw new Error('AI returned HTML instead of JSON - check API key and rate limits');
     }
 
-    throw new Error('AI did not return valid JSON format');
+    throw new Error('AI did not return a JSON object');
   }
 
+  // 4. JSON parsing (separate from schema validation)
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(jsonStr);
+    parsed = JSON.parse(jsonStr);
     console.log('Parsed JSON:', parsed);
-
-    // Validate the parsed metadata
-    validateMetadata(parsed);
-
-    // Apply limits and return
-    return applyLimits(parsed, limits);
   } catch (err) {
     console.error('❌ Failed to parse JSON from AI response:', err);
     console.error('📄 Raw response (first 500 chars):', text.substring(0, 500));
     console.error('🔍 Extracted JSON string:', jsonStr);
-    throw new Error(`Failed to parse AI response: ${err}`);
+    throw new Error('AI returned malformed JSON');
   }
+
+  // 5. Schema validation (separate from JSON parsing)
+  validateMetadata(parsed);
+
+  // 6. Apply limits and return
+  return applyLimits(parsed, limits);
 };
 
 // /**

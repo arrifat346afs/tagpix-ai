@@ -40,15 +40,15 @@ export const generateMetadataPrompt = (
 
   // Build avoid words sections if provided
   const titleAvoidWordsSection = avoidWords?.titleAvoidWords && avoidWords.titleAvoidWords.length > 0
-    ? `\nSTRICTLY FORBIDDEN: You MUST NOT include any of these words in the title under any circumstances: ${avoidWords.titleAvoidWords.join(', ')}. Verify your output does not contain any of these words.`
+    ? `\nSTRICTLY FORBIDDEN in title: ${avoidWords.titleAvoidWords.join(', ')}.`
     : '';
   
   const descriptionAvoidWordsSection = avoidWords?.descriptionAvoidWords && avoidWords.descriptionAvoidWords.length > 0
-    ? `\nSTRICTLY FORBIDDEN: You MUST NOT include any of these words in the description under any circumstances: ${avoidWords.descriptionAvoidWords.join(', ')}. Verify your output does not contain any of these words.`
+    ? `\nSTRICTLY FORBIDDEN in description: ${avoidWords.descriptionAvoidWords.join(', ')}.`
     : '';
   
   const keywordsAvoidWordsSection = avoidWords?.keywordsAvoidWords && avoidWords.keywordsAvoidWords.length > 0
-    ? `\nSTRICTLY FORBIDDEN: You MUST NOT include any of these words in the keywords under any circumstances: ${avoidWords.keywordsAvoidWords.join(', ')}. Verify your output does not contain any of these words.`
+    ? `\nSTRICTLY FORBIDDEN in keywords: ${avoidWords.keywordsAvoidWords.join(', ')}.`
     : '';
 
   // Build custom instruction section if provided
@@ -107,35 +107,25 @@ export const generateMetadataPrompt = (
   }
 
   // Use existing default logic when no custom template is provided
-  return `Generate stock photo metadata for this image.${customInstructionSection}
+  return `Analyze the provided image and return stock photo metadata.${customInstructionSection}
 
-IMPORTANT: Write complete, natural text. End at complete words, never cut words in half.
+Return ONLY one JSON object with these required fields:
+- title: string (approximately ${titleLimit} characters, complete descriptive title, no colons or special characters, end at a complete word, ${placeNameRule})
+- description: string (under ${descriptionLimit} characters, complete detailed description, no colons or special characters, end at a complete word, ${placeNameRule})
+- keywords: string (approximately ${keywordLimit} comma-separated keywords, no colons or special characters)
+${titleAvoidWordsSection}${descriptionAvoidWordsSection}${keywordsAvoidWordsSection}
 
+Do not use Markdown.
+Do not use \`\`\`json.
+Do not explain your answer.
+Do not include reasoning.
+Do not include any text before or after the JSON.
 
-Requirements:
-1. Title:
-   - Target approximately ${titleLimit} characters
-   - Write a complete, descriptive title
-   - End at a complete word (can be slightly over or under the target)
-   - No colons (:) or special characters
-   - ${placeNameRule}
-   ${titleAvoidWordsSection}
-
-2. Description:
-   - Target under ${descriptionLimit} characters
-   - Write a complete, detailed description
-   - End at a complete word (can be slightly over or under the target)
-   - No colons (:) or special characters
-   - ${placeNameRule}
-   ${descriptionAvoidWordsSection}
-
-3. Keywords:
-   - Provide approximately ${keywordLimit} keywords
-   - Comma-separated
-   - No colons (:) or special characters
-   ${keywordsAvoidWordsSection}
-
-Return ONLY JSON:
-{"title": "...", "description": "...", "keywords": "..."}`;
+Example:
+{
+  "title": "Example title",
+  "description": "Example description",
+  "keywords": "keyword one, keyword two, keyword three"
+}`;
 };
 

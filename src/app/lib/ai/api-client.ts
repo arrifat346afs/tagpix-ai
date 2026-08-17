@@ -15,30 +15,45 @@ export type MessageContent = {
   };
 };
 
+export type AIUsage = {
+  promptTokens: number;
+  completionTokens: number;
+  /** Exact billed cost in USD when the provider reports it (e.g. OpenRouter total_cost) */
+  totalCost?: number;
+};
+
+export type AIResponse = {
+  text: string;
+  finishReason?: string;
+  usage?: AIUsage;
+};
+
 export type GenerateTextOptions = {
   provider: string;
   apiKey: string;
   model: string;
   messages: any[];
+  /** Max output tokens for this call (defaults to 2048) */
+  maxTokens?: number;
 };
 
 /**
  * Calls the AI API with the provided options using direct fetch
  */
-export const callAIApi = async (options: GenerateTextOptions): Promise<string> => {
-  const { provider, apiKey, model, messages } = options;
+export const callAIApi = async (options: GenerateTextOptions): Promise<AIResponse> => {
+  const { provider, apiKey, model, messages, maxTokens } = options;
   console.log('🚀 Sending to AI (Direct Fetch)...', { provider, model });
 
   try {
     if (provider === 'google') {
-      return await callGoogleGemini(apiKey, model, messages);
+      return await callGoogleGemini(apiKey, model, messages, maxTokens);
     } else {
       // OpenAI and OpenRouter share similar chat completions API structure
       const baseUrl = provider === 'openrouter'
         ? 'https://openrouter.ai/api/v1'
         : 'https://api.openai.com/v1';
 
-      return await callOpenAICompatible(baseUrl, apiKey, model, messages, provider === 'openrouter');
+      return await callOpenAICompatible(baseUrl, apiKey, model, messages, provider === 'openrouter', maxTokens);
     }
   } catch (error: any) {
     console.error('❌ AI API call failed:', error);
@@ -54,8 +69,9 @@ async function callOpenAICompatible(
   apiKey: string,
   model: string,
   messages: any[],
-  isOpenRouter: boolean
-): Promise<string> {
+  isOpenRouter: boolean,
+  maxTokens: number = 2048
+): Promise<AIResponse> {
   // Transform messages if needed (Vercel SDK format to OpenAI format)
   // Our internal format is already close, but let's ensure image format is correct
   // OpenAI expects content: [{type: "text", text: "..."}, {type: "image_url", image_url: {url: "..."}}]
@@ -63,7 +79,7 @@ async function callOpenAICompatible(
   const payload = {
     model: model,
     messages: messages,
-    max_tokens: 1000,
+    max_tokens: maxTokens,
     temperature: 0.7,
   };
 
@@ -147,18 +163,26 @@ async function callOpenAICompatible(
       toast.error(errorMessage);
       throw new Error(errorMessage);
     }
-    
-    throw new Error(`API Error ${response.status}: ${errorBody}`);
+
+    // Failed-but-billed requests can still incur cost. Best-effort capture usage
+    // from the error body so the session tracker can include it.
+    throw attachUsageToError(new Error(`API Error ${response.status}: ${errorBody}`), parseOpenAIUsage(errorBody));
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+
+  const choice = data.choices?.[0];
+  return {
+    text: choice?.message?.content || '',
+    finishReason: choice?.finish_reason,
+    usage: parseOpenAIUsage(data),
+  };
 }
 
 /**
  * Handles Google Gemini API calls
  */
-async function callGoogleGemini(apiKey: string, model: string, messages: any[]): Promise<string> {
+async function callGoogleGemini(apiKey: string, model: string, messages: any[], maxTokens: number = 2048): Promise<AIResponse> {
   // Transform messages to Gemini format
   // Gemini expects: { parts: [{ text: "..." }, { inline_data: { mime_type: "...", data: "..." } }] }
 
@@ -195,7 +219,7 @@ async function callGoogleGemini(apiKey: string, model: string, messages: any[]):
   const payload = {
     contents,
     generationConfig: {
-      maxOutputTokens: 1000,
+      maxOutputTokens: maxTokens,
       temperature: 0.7,
     }
   };
@@ -237,13 +261,21 @@ async function callGoogleGemini(apiKey: string, model: string, messages: any[]):
       throw new Error(errorMessage);
     }
     
-    throw new Error(`Gemini API Error ${response.status}: ${errorBody}`);
+    throw attachUsageToError(new Error(`Gemini API Error ${response.status}: ${errorBody}`), parseGeminiUsage(errorBody));
   }
 
   const data = await response.json();
 
   // Extract text from Gemini response structure
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const candidate = data.candidates?.[0];
+  const finishReason = candidate?.finishReason;
+
+  return {
+    text: candidate?.content?.parts?.[0]?.text || '',
+    // Normalize Gemini's MAX_TOKENS to the OpenAI-style 'length' so callers can treat it uniformly
+    finishReason: finishReason === 'MAX_TOKENS' ? 'length' : finishReason,
+    usage: parseGeminiUsage(data),
+  };
 }
 
 /**
@@ -269,6 +301,55 @@ export const createVisionMessageContent = (
 };
 
 /**
+ * Extracts token usage from an OpenAI/OpenRouter-compatible response or error body.
+ * OpenRouter also reports the exact billed cost via usage.total_cost (USD).
+ */
+function parseOpenAIUsage(data: any): AIUsage | undefined {
+  const usage = data?.usage;
+  if (!usage) return undefined;
+
+  const promptTokens = Number(usage.prompt_tokens ?? usage.promptTokens ?? NaN);
+  const completionTokens = Number(usage.completion_tokens ?? usage.completionTokens ?? NaN);
+  if (Number.isNaN(promptTokens) && Number.isNaN(completionTokens)) return undefined;
+
+  const totalCost = usage.total_cost != null ? Number(usage.total_cost) : undefined;
+
+  return {
+    promptTokens: Number.isNaN(promptTokens) ? 0 : promptTokens,
+    completionTokens: Number.isNaN(completionTokens) ? 0 : completionTokens,
+    totalCost: totalCost != null && !Number.isNaN(totalCost) ? totalCost : undefined,
+  };
+}
+
+/**
+ * Extracts token usage from a Gemini response or error body.
+ */
+function parseGeminiUsage(data: any): AIUsage | undefined {
+  const usage = data?.usageMetadata;
+  if (!usage) return undefined;
+
+  const promptTokens = Number(usage.promptTokenCount ?? NaN);
+  const completionTokens = Number(usage.candidatesTokenCount ?? NaN);
+  if (Number.isNaN(promptTokens) && Number.isNaN(completionTokens)) return undefined;
+
+  return {
+    promptTokens: Number.isNaN(promptTokens) ? 0 : promptTokens,
+    completionTokens: Number.isNaN(completionTokens) ? 0 : completionTokens,
+  };
+}
+
+/**
+ * Attaches usage info to an error so failed-but-billed requests can still be
+ * counted by the session cost tracker.
+ */
+function attachUsageToError(error: Error, usage?: AIUsage): Error {
+  if (usage) {
+    (error as Error & { usage?: AIUsage }).usage = usage;
+  }
+  return error;
+}
+
+/**
  * Helper to validate/fix base64 strings if needed
  */
 export const ensureBase64 = (url: string): string => {
@@ -281,10 +362,12 @@ interface LocalOpenAICompatibleOptions {
   messages: any[];
   /** Base URL of the OpenAI-compatible local server (e.g. http://localhost:1234/v1) */
   baseUrl?: string;
+  /** Max output tokens for this call (defaults to 2048) */
+  maxTokens?: number;
 }
 
-export async function callLocalOpenAICompatible(options: LocalOpenAICompatibleOptions): Promise<string> {
-  const { model, messages, baseUrl } = options;
+export async function callLocalOpenAICompatible(options: LocalOpenAICompatibleOptions): Promise<AIResponse> {
+  const { model, messages, baseUrl, maxTokens = 2048 } = options;
   const url = normalizeLocalBaseUrl(baseUrl);
 
   if (!url) {
@@ -297,7 +380,7 @@ export async function callLocalOpenAICompatible(options: LocalOpenAICompatibleOp
     const payload = {
       model: model,
       messages: messages,
-      max_tokens: 1000,
+      max_tokens: maxTokens,
       temperature: 0.7,
     };
 
@@ -314,11 +397,17 @@ export async function callLocalOpenAICompatible(options: LocalOpenAICompatibleOp
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(`Local AI API Error ${response.status}: ${errorBody}`);
+      throw attachUsageToError(new Error(`Local AI API Error ${response.status}: ${errorBody}`), parseOpenAIUsage(errorBody));
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content || '';
+
+    const choice = data.choices?.[0];
+    return {
+      text: choice?.message?.content || '',
+      finishReason: choice?.finish_reason,
+      usage: parseOpenAIUsage(data),
+    };
   } catch (error: any) {
     console.error('❌ Local AI API call failed:', error);
     throw new Error(`Local AI API call failed: ${error.message || error}`);
