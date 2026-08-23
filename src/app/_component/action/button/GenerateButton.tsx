@@ -212,6 +212,21 @@ const GenerateButtonComponent = () => {
     }
   };
 
+  // Resolve early when the signal aborts so cancellation isn't stuck waiting out the delay
+  const delayWithSignal = (ms: number, signal?: AbortSignal) =>
+    new Promise<void>((resolve) => {
+      const onAbort = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      if (signal?.aborted) return onAbort();
+      signal?.addEventListener('abort', onAbort);
+    });
+
   // Process items sequentially (current behavior)
   const processItemsSequential = async (items: any[], provider: any, model: string | undefined, apiKey: string, useLocalModel: boolean, localModelName: string | undefined, localApiUrl: string | undefined, signal?: AbortSignal) => {
     for (let i = 0; i < items.length; i++) {
@@ -226,7 +241,7 @@ const GenerateButtonComponent = () => {
       // Apply delay before next request (except for last item)
       if (i < items.length - 1 && api.requestDelay > 0) {
         console.log(`⏱️ Waiting ${api.requestDelay}ms before next request...`);
-        await new Promise(resolve => setTimeout(resolve, api.requestDelay));
+        await delayWithSignal(api.requestDelay, signal);
       }
     }
   };
@@ -263,7 +278,7 @@ const GenerateButtonComponent = () => {
       // Apply delay after each batch (except for last batch)
       if (i + workers < items.length && api.requestDelay > 0) {
         console.log(`⏱️ Waiting ${api.requestDelay}ms before next batch...`);
-        await new Promise(resolve => setTimeout(resolve, api.requestDelay));
+        await delayWithSignal(api.requestDelay, signal);
       }
     }
   };

@@ -35,7 +35,7 @@ export const ApiCostBadge = ({ className }: ApiCostBadgeProps) => {
   // Fetch the selected provider's model pricing on startup (and when the
   // selection changes) so the badge can show the exact price of the
   // previously selected model before any request is made.
-  const requestedKey = `${provider}:${apiKey}`;
+  const requestedKey = `${provider}:${apiKey ?? ''}:${useLocalModel}:${localApiUrl ?? ''}`;
   const lastRequestedRef = useRef<string | null>(null);
   useEffect(() => {
     if (!provider || lastRequestedRef.current === requestedKey) return;
