@@ -95,7 +95,8 @@ const ApiSettings = () => {
         setLocalModels(fetchedModels);
       } catch (error) {
         console.error('Error loading local models:', error);
-        toast.error('Failed to load local models');
+        const message = error instanceof Error ? error.message : 'Failed to load local models';
+        toast.error(message);
         setLocalModels([]);
       } finally {
         setIsLoadingLocalModels(false);
@@ -267,6 +268,9 @@ const ApiSettings = () => {
               onChange={(e) => setLocalLocalApiUrl(e.target.value)}
               placeholder="http://localhost:1234/v1"
             />
+            <p className="text-xs text-gray-400 mt-1">
+              e.g. <span className="font-mono">http://localhost:1234</span> — the <span className="font-mono">/v1</span> suffix is added automatically. Only vision-capable models (LM Studio shows a "vision" capability) can describe images.
+            </p>
           </div>
 
           <div>

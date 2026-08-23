@@ -35,6 +35,8 @@ export type GenerateMetadataOptions = {
   localModelName?: string;
   /** Base URL of the local OpenAI-compatible server (when useLocalModel is true) */
   localApiUrl?: string;
+  /** Abort signal so in-flight requests can be cancelled */
+  signal?: AbortSignal;
   limits?: { titleLimit?: number; descriptionLimit?: number; keywordLimit?: number };
   includePlaceName?: boolean;
   customTemplate?: string;
@@ -62,7 +64,7 @@ const CORRECTIVE_INSTRUCTION = `\n\nPrevious response was invalid.\nReturn ONLY 
  *  - malformed/schema retry appends a corrective instruction
  */
 export const generateMetadata = async (opts: GenerateMetadataOptions): Promise<GeneratedMetadata> => {
-  const { file, filePath, thumbnailUrls, provider = 'openai', model, apiKey, useLocalModel, localModelName, localApiUrl, limits, includePlaceName, customTemplate, customInstruction, avoidWords } = opts;
+  const { file, filePath, thumbnailUrls, provider = 'openai', model, apiKey, useLocalModel, localModelName, localApiUrl, signal, limits, includePlaceName, customTemplate, customInstruction, avoidWords } = opts;
 
   // Track the provider/model actually billed for the most recent attempt so a
   // failed-but-billed HTTP error can still be recorded in the outer catch.
@@ -140,6 +142,7 @@ export const generateMetadata = async (opts: GenerateMetadataOptions): Promise<G
           baseUrl: localApiUrl,
           messages,
           maxTokens,
+          signal,
         });
       } else {
         // Use remote API model
@@ -166,6 +169,7 @@ export const generateMetadata = async (opts: GenerateMetadataOptions): Promise<G
           model: billedModel,
           messages,
           maxTokens,
+          signal,
         });
       }
 
@@ -196,9 +200,17 @@ export const generateMetadata = async (opts: GenerateMetadataOptions): Promise<G
           throw error;
         }
 
-        // Retry malformed/schema failures with a corrective instruction
+        // Retry malformed/schema failures with a corrective instruction.
+        // Appended to the original user message instead of pushed as a new
+        // one — some local OpenAI-compatible servers reject consecutive
+        // same-role messages.
         lastError = error;
-        messages.push({ role: 'user', content: CORRECTIVE_INSTRUCTION });
+        const userMessage = messages[0];
+        if (Array.isArray(userMessage.content)) {
+          userMessage.content = [...userMessage.content, { type: 'text', text: CORRECTIVE_INSTRUCTION }];
+        } else {
+          userMessage.content = `${userMessage.content}${CORRECTIVE_INSTRUCTION}`;
+        }
         console.warn(`⚠️ Retrying attempt ${attempt + 1}/${MAX_ATTEMPTS} with corrective instruction...`);
       }
     }
