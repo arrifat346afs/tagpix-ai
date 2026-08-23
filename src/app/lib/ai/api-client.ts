@@ -82,6 +82,10 @@ async function postJsonWithTimeout(
           : CANCELLED_MESSAGE
       );
     }
+    // Tauri's HTTP plugin may surface aborts under a different error name
+    if (external?.aborted) {
+      throw new Error(CANCELLED_MESSAGE);
+    }
     throw error;
   } finally {
     clearTimeout(timer);
@@ -363,7 +367,16 @@ export const createVisionMessageContent = (
  * also accepted as a fallback.
  */
 function parseOpenAIUsage(data: any, isOpenRouter = false): AIUsage | undefined {
-  const usage = data?.usage;
+  let parsed = data;
+  if (typeof data === 'string') {
+    try {
+      parsed = JSON.parse(data);
+    } catch {
+      return undefined;
+    }
+  }
+
+  const usage = parsed?.usage;
   if (!usage) return undefined;
 
   const promptTokens = Number(usage.prompt_tokens ?? usage.promptTokens ?? NaN);
@@ -387,7 +400,16 @@ function parseOpenAIUsage(data: any, isOpenRouter = false): AIUsage | undefined 
  * Extracts token usage from a Gemini response or error body.
  */
 function parseGeminiUsage(data: any): AIUsage | undefined {
-  const usage = data?.usageMetadata;
+  let parsed = data;
+  if (typeof data === 'string') {
+    try {
+      parsed = JSON.parse(data);
+    } catch {
+      return undefined;
+    }
+  }
+
+  const usage = parsed?.usageMetadata;
   if (!usage) return undefined;
 
   const promptTokens = Number(usage.promptTokenCount ?? NaN);

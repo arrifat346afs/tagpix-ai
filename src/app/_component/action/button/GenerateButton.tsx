@@ -216,7 +216,7 @@ const GenerateButtonComponent = () => {
   const processItemsSequential = async (items: any[], provider: any, model: string | undefined, apiKey: string, useLocalModel: boolean, localModelName: string | undefined, localApiUrl: string | undefined, signal?: AbortSignal) => {
     for (let i = 0; i < items.length; i++) {
       // Check if cancellation was requested
-      if (cancelRequestedRef.current) {
+      if (signal?.aborted || cancelRequestedRef.current) {
         console.log('🛑 Generation cancelled by user');
         break;
       }
@@ -236,7 +236,7 @@ const GenerateButtonComponent = () => {
     // Process items in batches starting from the beginning
     for (let i = 0; i < items.length; i += workers) {
       // Check if cancellation was requested
-      if (cancelRequestedRef.current) {
+      if (signal?.aborted || cancelRequestedRef.current) {
         console.log('🛑 Parallel processing cancelled by user');
         break;
       }
@@ -245,7 +245,7 @@ const GenerateButtonComponent = () => {
       
       // Process batch concurrently
       const batchPromises = batch.map(async (item) => {
-        if (!cancelRequestedRef.current) {
+        if (!signal?.aborted && !cancelRequestedRef.current) {
           const itemIndex = i + items.indexOf(item);
           return processSingleItem(item, itemIndex, items.length, provider, model, apiKey, useLocalModel, localModelName, localApiUrl, signal);
         }
@@ -360,24 +360,26 @@ const GenerateButtonComponent = () => {
     // Enable mid-request cancellation via the Cancel button
     const signal = beginGeneration();
 
-    // Process items based on selected mode
-    if (processingMode === 'parallel') {
-      await processItemsParallel(items, parallelWorkers, provider, model, apiKey!, useLocalModel, localModelName, localApiUrl, signal);
-    } else {
-      await processItemsSequential(items, provider, model, apiKey!, useLocalModel, localModelName, localApiUrl, signal);
+    // Process items based on selected mode; always tear down generation state
+    try {
+      if (processingMode === 'parallel') {
+        await processItemsParallel(items, parallelWorkers, provider, model, apiKey!, useLocalModel, localModelName, localApiUrl, signal);
+      } else {
+        await processItemsSequential(items, provider, model, apiKey!, useLocalModel, localModelName, localApiUrl, signal);
+      }
+    } finally {
+      endGeneration();
+
+      const wasCancelled = generationProgress.cancelRequested;
+      console.log(wasCancelled ? '🛑 Metadata generation cancelled!' : '✅ Metadata generation complete for all files!');
+      setGenerationProgress({
+        isGenerating: false,
+        currentIndex: 0,
+        currentFileName: '',
+        totalFiles: 0,
+        cancelRequested: false,
+      });
     }
-
-    endGeneration();
-
-    const wasCancelled = generationProgress.cancelRequested;
-    console.log(wasCancelled ? '🛑 Metadata generation cancelled!' : '✅ Metadata generation complete for all files!');
-    setGenerationProgress({
-      isGenerating: false,
-      currentIndex: 0,
-      currentFileName: '',
-      totalFiles: 0,
-      cancelRequested: false,
-    });
   };
 
   const buttonText = thumbnails.isGenerating

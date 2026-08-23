@@ -11,10 +11,7 @@ const CancelButtonComponent = () => {
   const handleCancel = () => {
     console.log('🛑 Cancel requested from CancelButton');
     // Abort in-flight HTTP requests immediately, then stop scheduling new ones
-    const aborted = cancelGeneration();
-    if (aborted) {
-      console.log('🛑 Aborted all in-flight AI requests');
-    }
+    cancelGeneration();
     setGenerationProgress({ cancelRequested: true });
   };
 

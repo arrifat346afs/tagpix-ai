@@ -152,8 +152,8 @@ export async function fetchOpenRouterModels(apiKey?: string): Promise<ModelInfo[
         const provider = model.id.split('/')[0] || 'OpenRouter';
         const pricing = model.pricing
           ? {
-              prompt: parseFloat(model.pricing.prompt) || 0,
-              completion: parseFloat(model.pricing.completion) || 0,
+              prompt: (parseFloat(model.pricing.prompt) || 0) * 1_000_000,
+              completion: (parseFloat(model.pricing.completion) || 0) * 1_000_000,
             }
           : undefined;
         return {
@@ -357,7 +357,8 @@ export function normalizeLocalBaseUrl(url?: string): string {
   let cleaned = (url || '').trim().replace(/\/+$/, '');
   if (!cleaned) return '';
   cleaned = cleaned.replace(/\/chat\/completions$/i, '');
-  if (!/\/v\d+$/.test(cleaned)) {
+  // Skip appending when a version segment already exists anywhere in the path
+  if (!/\/v\d+(\/|$)/.test(cleaned)) {
     cleaned = `${cleaned}/v1`;
   }
   return cleaned;

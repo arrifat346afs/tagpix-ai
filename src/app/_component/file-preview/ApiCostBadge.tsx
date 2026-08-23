@@ -46,7 +46,12 @@ export const ApiCostBadge = ({ className }: ApiCostBadgeProps) => {
       .finally(() => setIsLoadingPricing(false));
   }, [provider, apiKey, requestedKey, useLocalModel, localApiUrl]);
 
-  const modelInfo = useMemo(() => getModelPriceInfo(provider, model), [provider, model]);
+  // Recompute once the pricing refresh settles — refreshModelPricing populates
+  // the metadata cache as a side effect the memo deps can't observe.
+  const modelInfo = useMemo(
+    () => getModelPriceInfo(provider, model),
+    [provider, model, isLoadingPricing]
+  );
 
   const modelLabel = modelInfo ? formatModelPrice(modelInfo) : null;
   const isFreeModel = modelInfo?.free === true;
