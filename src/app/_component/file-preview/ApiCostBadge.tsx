@@ -13,6 +13,7 @@ type ApiCostBadgeProps = {
 /**
  * Displays the API cost for the current session and the pricing of the
  * currently selected model (read from persisted settings at startup).
+ * 
  * All cost computation and state management live here; parent components
  * only render this badge.
  */
