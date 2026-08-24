@@ -6,6 +6,7 @@
 import { toast } from "sonner";
 import { fetch } from "@tauri-apps/plugin-http";
 import { normalizeLocalBaseUrl } from "../modelFetcher";
+import { stripThinkBlocks } from "./response-parser";
 
 export type MessageContent = {
   type: 'text' | 'image_url'; // OpenAI/OpenRouter standard
@@ -35,28 +36,87 @@ export type GenerateTextOptions = {
   messages: any[];
   /** Max output tokens for this call (defaults to 2048) */
   maxTokens?: number;
+  /** Abort signal so in-flight requests can be cancelled */
+  signal?: AbortSignal;
 };
+
+/** Local servers can be slow (prompt processing, cold loads) — generous ceiling */
+const LOCAL_REQUEST_TIMEOUT_MS = 180_000;
+const REMOTE_REQUEST_TIMEOUT_MS = 120_000;
+
+export const CANCELLED_MESSAGE = 'Request cancelled';
+
+/**
+ * POSTs JSON with a hard timeout and optional external abort signal.
+ * Distinguishes timeout from cancellation with distinct error messages so
+ * callers never hang forever waiting on a stuck server.
+ */
+async function postJsonWithTimeout(
+  url: string,
+  body: string,
+  headers: Record<string, string>,
+  options: { timeoutMs: number; signal?: AbortSignal }
+): Promise<Response> {
+  const controller = new AbortController();
+  let timedOut = false;
+
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, options.timeoutMs);
+
+  const forwardAbort = () => controller.abort();
+  const external = options.signal;
+  if (external) {
+    if (external.aborted) controller.abort();
+    else external.addEventListener('abort', forwardAbort);
+  }
+
+  try {
+    return await fetch(url, { method: 'POST', headers, body, signal: controller.signal });
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      throw new Error(
+        timedOut
+          ? `AI request timed out after ${Math.round(options.timeoutMs / 1000)}s. The server may be busy or the model may not support this request.`
+          : CANCELLED_MESSAGE
+      );
+    }
+    // Tauri's HTTP plugin may surface aborts under a different error name
+    if (external?.aborted) {
+      throw new Error(CANCELLED_MESSAGE);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    if (external) external.removeEventListener('abort', forwardAbort);
+  }
+}
 
 /**
  * Calls the AI API with the provided options using direct fetch
  */
 export const callAIApi = async (options: GenerateTextOptions): Promise<AIResponse> => {
-  const { provider, apiKey, model, messages, maxTokens } = options;
+  const { provider, apiKey, model, messages, maxTokens, signal } = options;
   console.log('🚀 Sending to AI (Direct Fetch)...', { provider, model });
 
   try {
     if (provider === 'google') {
-      return await callGoogleGemini(apiKey, model, messages, maxTokens);
+      return await callGoogleGemini(apiKey, model, messages, maxTokens, signal);
     } else {
       // OpenAI and OpenRouter share similar chat completions API structure
       const baseUrl = provider === 'openrouter'
         ? 'https://openrouter.ai/api/v1'
         : 'https://api.openai.com/v1';
 
-      return await callOpenAICompatible(baseUrl, apiKey, model, messages, provider === 'openrouter', maxTokens);
+      return await callOpenAICompatible(baseUrl, apiKey, model, messages, provider === 'openrouter', maxTokens, signal);
     }
   } catch (error: any) {
     console.error('❌ AI API call failed:', error);
+    // Preserve cancellation/timeout messages so callers can recognize them
+    if (error instanceof Error && (error.message === CANCELLED_MESSAGE || error.message.startsWith('AI request timed out'))) {
+      throw error;
+    }
     throw new Error(`AI API call failed: ${error.message || error}`);
   }
 };
@@ -70,7 +130,8 @@ async function callOpenAICompatible(
   model: string,
   messages: any[],
   isOpenRouter: boolean,
-  maxTokens: number = 2048
+  maxTokens: number = 2048,
+  signal?: AbortSignal
 ): Promise<AIResponse> {
   // Transform messages if needed (Vercel SDK format to OpenAI format)
   // Our internal format is already close, but let's ensure image format is correct
@@ -140,11 +201,12 @@ async function callOpenAICompatible(
     headers['X-Title'] = 'Descify'; // Optional
   }
 
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
+  const response = await postJsonWithTimeout(
+    `${baseUrl}/chat/completions`,
+    payloadString,
     headers,
-    body: payloadString
-  });
+    { timeoutMs: REMOTE_REQUEST_TIMEOUT_MS, signal }
+  );
 
   if (!response.ok) {
     const errorBody = await response.text();
@@ -166,7 +228,7 @@ async function callOpenAICompatible(
 
     // Failed-but-billed requests can still incur cost. Best-effort capture usage
     // from the error body so the session tracker can include it.
-    throw attachUsageToError(new Error(`API Error ${response.status}: ${errorBody}`), parseOpenAIUsage(errorBody));
+    throw attachUsageToError(new Error(`API Error ${response.status}: ${errorBody}`), parseOpenAIUsage(errorBody, isOpenRouter));
   }
 
   const data = await response.json();
@@ -175,14 +237,14 @@ async function callOpenAICompatible(
   return {
     text: choice?.message?.content || '',
     finishReason: choice?.finish_reason,
-    usage: parseOpenAIUsage(data),
+    usage: parseOpenAIUsage(data, isOpenRouter),
   };
 }
 
 /**
  * Handles Google Gemini API calls
  */
-async function callGoogleGemini(apiKey: string, model: string, messages: any[], maxTokens: number = 2048): Promise<AIResponse> {
+async function callGoogleGemini(apiKey: string, model: string, messages: any[], maxTokens: number = 2048, signal?: AbortSignal): Promise<AIResponse> {
   // Transform messages to Gemini format
   // Gemini expects: { parts: [{ text: "..." }, { inline_data: { mime_type: "...", data: "..." } }] }
 
@@ -235,13 +297,12 @@ async function callGoogleGemini(apiKey: string, model: string, messages: any[], 
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: payloadString
-  });
+  const response = await postJsonWithTimeout(
+    url,
+    payloadString,
+    { 'Content-Type': 'application/json' },
+    { timeoutMs: REMOTE_REQUEST_TIMEOUT_MS, signal }
+  );
 
   if (!response.ok) {
     const errorBody = await response.text();
@@ -302,17 +363,31 @@ export const createVisionMessageContent = (
 
 /**
  * Extracts token usage from an OpenAI/OpenRouter-compatible response or error body.
- * OpenRouter also reports the exact billed cost via usage.total_cost (USD).
+ * OpenRouter reports the exact billed cost in usage.cost (USD); total_cost is
+ * also accepted as a fallback.
  */
-function parseOpenAIUsage(data: any): AIUsage | undefined {
-  const usage = data?.usage;
+function parseOpenAIUsage(data: any, isOpenRouter = false): AIUsage | undefined {
+  let parsed = data;
+  if (typeof data === 'string') {
+    try {
+      parsed = JSON.parse(data);
+    } catch {
+      return undefined;
+    }
+  }
+
+  const usage = parsed?.usage;
   if (!usage) return undefined;
 
   const promptTokens = Number(usage.prompt_tokens ?? usage.promptTokens ?? NaN);
   const completionTokens = Number(usage.completion_tokens ?? usage.completionTokens ?? NaN);
   if (Number.isNaN(promptTokens) && Number.isNaN(completionTokens)) return undefined;
 
-  const totalCost = usage.total_cost != null ? Number(usage.total_cost) : undefined;
+  // OpenRouter returns the exact billed cost in usage.cost (and usage.total_cost).
+  const rawCost = isOpenRouter
+    ? (usage.cost ?? usage.total_cost)
+    : (usage.total_cost ?? usage.cost);
+  const totalCost = rawCost != null ? Number(rawCost) : undefined;
 
   return {
     promptTokens: Number.isNaN(promptTokens) ? 0 : promptTokens,
@@ -325,7 +400,16 @@ function parseOpenAIUsage(data: any): AIUsage | undefined {
  * Extracts token usage from a Gemini response or error body.
  */
 function parseGeminiUsage(data: any): AIUsage | undefined {
-  const usage = data?.usageMetadata;
+  let parsed = data;
+  if (typeof data === 'string') {
+    try {
+      parsed = JSON.parse(data);
+    } catch {
+      return undefined;
+    }
+  }
+
+  const usage = parsed?.usageMetadata;
   if (!usage) return undefined;
 
   const promptTokens = Number(usage.promptTokenCount ?? NaN);
@@ -364,10 +448,12 @@ interface LocalOpenAICompatibleOptions {
   baseUrl?: string;
   /** Max output tokens for this call (defaults to 2048) */
   maxTokens?: number;
+  /** Abort signal so in-flight requests can be cancelled */
+  signal?: AbortSignal;
 }
 
 export async function callLocalOpenAICompatible(options: LocalOpenAICompatibleOptions): Promise<AIResponse> {
-  const { model, messages, baseUrl, maxTokens = 2048 } = options;
+  const { model, messages, baseUrl, maxTokens = 2048, signal } = options;
   const url = normalizeLocalBaseUrl(baseUrl);
 
   if (!url) {
@@ -375,6 +461,8 @@ export async function callLocalOpenAICompatible(options: LocalOpenAICompatibleOp
   }
 
   console.log('🏠 Calling local OpenAI-compatible API...', { model, url });
+
+  let data: any;
 
   try {
     const payload = {
@@ -387,31 +475,49 @@ export async function callLocalOpenAICompatible(options: LocalOpenAICompatibleOp
     const payloadString = JSON.stringify(payload);
     console.log(`📦 Local AI Payload size: ${(payloadString.length / 1024).toFixed(2)} KB`);
 
-    const response = await fetch(`${url}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: payloadString,
-    });
+    const response = await postJsonWithTimeout(`${url}/chat/completions`, payloadString, {
+      'Content-Type': 'application/json',
+    }, { timeoutMs: LOCAL_REQUEST_TIMEOUT_MS, signal });
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw attachUsageToError(new Error(`Local AI API Error ${response.status}: ${errorBody}`), parseOpenAIUsage(errorBody));
+      throw attachUsageToError(
+        new Error(`Local AI API Error ${response.status}: ${errorBody}`),
+        parseOpenAIUsage(errorBody)
+      );
     }
 
-    const data = await response.json();
-
-    const choice = data.choices?.[0];
-    return {
-      text: choice?.message?.content || '',
-      finishReason: choice?.finish_reason,
-      usage: parseOpenAIUsage(data),
-    };
+    data = await response.json();
   } catch (error: any) {
-    console.error('❌ Local AI API call failed:', error);
-    throw new Error(`Local AI API call failed: ${error.message || error}`);
+    if (error instanceof Error && (error.message === CANCELLED_MESSAGE || error.message.startsWith('AI request timed out'))) {
+      console.error('❌ Local AI request aborted:', error.message);
+    } else {
+      console.error('❌ Local AI API call failed:', error);
+    }
+    throw error;
   }
+
+  const choice = data.choices?.[0];
+  const rawContent: string = choice?.message?.content || '';
+  const text = stripThinkBlocks(rawContent);
+
+  // Some servers return the answer only in a separate reasoning field
+  const reasoningOnly =
+    !text.trim() &&
+    (Boolean(choice?.message?.reasoning_content) || Boolean(rawContent.trim()));
+
+  if (reasoningOnly) {
+    throw new Error(
+      'The local model produced only reasoning tokens and no final answer. ' +
+      'Disable "thinking" mode for this model in your local server, or select a non-reasoning vision model.'
+    );
+  }
+
+  return {
+    text,
+    finishReason: choice?.finish_reason,
+    usage: parseOpenAIUsage(data),
+  };
 }
 
 /**

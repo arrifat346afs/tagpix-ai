@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/app/contexts/SettingsContext";
+import { cancelGeneration } from "@/app/lib/generationControl";
 import { X } from "lucide-react";
 import React from "react";
 
@@ -9,6 +10,8 @@ const CancelButtonComponent = () => {
 
   const handleCancel = () => {
     console.log('🛑 Cancel requested from CancelButton');
+    // Abort in-flight HTTP requests immediately, then stop scheduling new ones
+    cancelGeneration();
     setGenerationProgress({ cancelRequested: true });
   };
 

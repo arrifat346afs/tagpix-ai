@@ -5,6 +5,13 @@ import { fetch } from "@tauri-apps/plugin-http";
  * Handles dynamic fetching of available models from different AI providers
  */
 
+export type ModelPricing = {
+  /** USD per 1M prompt tokens */
+  prompt: number;
+  /** USD per 1M completion tokens */
+  completion: number;
+};
+
 export type ModelInfo = {
   value: string;
   label: string;
@@ -14,7 +21,74 @@ export type ModelInfo = {
   contextWindow?: number;
   inputTypes?: string[];
   supportsReasoning?: boolean;
+  /** Per-token pricing metadata (USD per 1M tokens) when known. */
+  pricing?: ModelPricing;
+  /** Explicitly free (e.g. OpenRouter `:free` models). */
+  isFree?: boolean;
 };
+
+/**
+ * Module-level cache of model metadata keyed by full model id.
+ * Populated whenever models are fetched (e.g. in Settings). Lets the cost
+ * logic resolve a model's pricing/free status without an extra network call.
+ */
+export type ModelMetadata = {
+  label?: string;
+  pricing?: ModelPricing;
+  isFree?: boolean;
+};
+
+const modelMetadataCache = new Map<string, ModelMetadata>();
+
+/** Registers metadata for a batch of models. */
+export function registerModelMetadata(models: ModelInfo[]): void {
+  for (const model of models) {
+    if (!model.value) continue;
+    const entry: ModelMetadata = { label: model.label };
+    if (model.pricing) entry.pricing = model.pricing;
+    if (model.isFree !== undefined) entry.isFree = model.isFree;
+    modelMetadataCache.set(model.value, entry);
+  }
+}
+
+/** Looks up cached metadata for a model id. */
+export function getCachedModelMetadata(model: string): ModelMetadata | undefined {
+  return modelMetadataCache.get(model);
+}
+
+/**
+ * Fetches the model list for the given provider and registers its pricing
+ * metadata into the cache. Called on startup so the cost badge can show the
+ * exact price of the previously selected model without opening Settings.
+ * Returns the fetched models (or [] on failure).
+ */
+export async function refreshModelPricing(
+  provider?: string,
+  apiKey?: string,
+  useLocalModel?: boolean,
+  localApiUrl?: string
+): Promise<ModelInfo[]> {
+  try {
+    if (useLocalModel) {
+      const localModels = await fetchLocalModels(localApiUrl);
+      registerModelMetadata(localModels);
+      return localModels;
+    }
+    if (provider === 'openrouter') {
+      const models = await fetchOpenRouterModels(apiKey);
+      return models; // registerModelMetadata already called inside
+    }
+    if (provider === 'gemini') {
+      const models = await fetchGeminiModels(apiKey);
+      registerModelMetadata(models);
+      return models;
+    }
+    return [];
+  } catch (error) {
+    console.error('Error refreshing model pricing:', error);
+    return [];
+  }
+}
 
 type OpenRouterModel = {
   id: string;
@@ -76,6 +150,12 @@ export async function fetchOpenRouterModels(apiKey?: string): Promise<ModelInfo[
       .map((model) => {
         const isFree = model.id.includes(':free');
         const provider = model.id.split('/')[0] || 'OpenRouter';
+        const pricing = model.pricing
+          ? {
+              prompt: (parseFloat(model.pricing.prompt) || 0) * 1_000_000,
+              completion: (parseFloat(model.pricing.completion) || 0) * 1_000_000,
+            }
+          : undefined;
         return {
           value: model.id,
           label: isFree ? `${model.name} (Free)` : model.name,
@@ -88,12 +168,16 @@ export async function fetchOpenRouterModels(apiKey?: string): Promise<ModelInfo[
             Boolean(model.reasoning) ||
             (model.supported_parameters?.includes('reasoning') ?? false) ||
             (model.supported_parameters?.includes('include_reasoning') ?? false),
+          pricing,
+          isFree,
         };
       })
       .sort((a, b) => a.label.localeCompare(b.label));
 
     console.log(`OpenRouter: Filtered ${models.length} -> ${imageToTextModels.length} image-to-text models.`);
     console.log('First 10 image-to-text models:', imageToTextModels.slice(0, 10).map(m => m.label));
+
+    registerModelMetadata(imageToTextModels);
 
     return imageToTextModels;
   } catch (error) {
@@ -219,7 +303,7 @@ export async function fetchGeminiModels(apiKey?: string): Promise<ModelInfo[]> {
  * Fallback models for OpenRouter (used when API fails or no API key)
  */
 function getFallbackOpenRouterModels(): ModelInfo[] {
-  return [
+  const free: Omit<ModelInfo, 'isFree' | 'pricing'>[] = [
     { value: 'openrouter/polaris-alpha', label: 'Polaris Alpha (Free)', supportsVision: true, provider: 'OpenRouter', contextWindow: 1_048_576, inputTypes: ['text', 'image'], supportsReasoning: true },
     { value: 'nvidia/nemotron-nano-12b-v2-vl:free', label: 'Nemotron Nano 12B VL (Free)', supportsVision: true, provider: 'NVIDIA', contextWindow: 131_072, inputTypes: ['text', 'image'] },
     { value: 'qwen/qwen2.5-vl-32b-instruct:free', label: 'Qwen 2.5 VL 32B Instruct (Free)', supportsVision: true, provider: 'Qwen', contextWindow: 32_768, inputTypes: ['text', 'image'] },
@@ -232,6 +316,13 @@ function getFallbackOpenRouterModels(): ModelInfo[] {
     { value: 'google/gemma-3-12b-it:free', label: 'Gemma 3 12B IT (Free)', supportsVision: true, provider: 'Google', contextWindow: 131_072, inputTypes: ['text', 'image'], supportsReasoning: true },
     { value: 'google/gemma-3-27b-it:free', label: 'Gemma 3 27B IT (Free)', supportsVision: true, provider: 'Google', contextWindow: 131_072, inputTypes: ['text', 'image'], supportsReasoning: true },
   ];
+  const models: ModelInfo[] = free.map((m) => ({
+    ...m,
+    isFree: true,
+    pricing: { prompt: 0, completion: 0 },
+  }));
+  registerModelMetadata(models);
+  return models;
 }
 
 /**
@@ -256,8 +347,21 @@ function getFallbackGeminiModels(): ModelInfo[] {
   ];
 }
 
+/**
+ * Normalizes the user-entered local server base URL:
+ * - trims whitespace/trailing slashes
+ * - strips a pasted full endpoint path (e.g. .../chat/completions)
+ * - appends /v1 when no version segment is present
+ */
 export function normalizeLocalBaseUrl(url?: string): string {
-  return (url || '').trim().replace(/\/+$/, '');
+  let cleaned = (url || '').trim().replace(/\/+$/, '');
+  if (!cleaned) return '';
+  cleaned = cleaned.replace(/\/chat\/completions$/i, '');
+  // Skip appending when a version segment already exists anywhere in the path
+  if (!/\/v\d+(\/|$)/.test(cleaned)) {
+    cleaned = `${cleaned}/v1`;
+  }
+  return cleaned;
 }
 
 type LMStudioModel = {
@@ -266,30 +370,97 @@ type LMStudioModel = {
   filename?: string;
 };
 
+type LMStudioV0Model = {
+  id: string;
+  display_name?: string;
+  type?: string;
+  /** e.g. ["vision", "reasoning", "function_calling"] — only reported by LM Studio's /api/v0/models */
+  capabilities?: string[];
+};
+
+/** Origin of a normalized base URL, or null when it cannot be parsed. */
+function localServerOrigin(baseUrl: string): string | null {
+  try {
+    return new URL(baseUrl).origin;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Fetches available models from an OpenAI-compatible local server
- * Returns models that support vision (image input) based on capabilities
+ * Probes LM Studio's richer REST API (/api/v0/models) which reports per-model
+ * capabilities ("vision", "reasoning"). Returns null when unavailable so the
+ * caller can fall back to the standard OpenAI-compatible /models endpoint.
+ */
+async function fetchLMStudioV0Models(origin: string): Promise<ModelInfo[] | null> {
+  try {
+    const response = await fetch(`${origin}/api/v0/models`);
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const models: LMStudioV0Model[] = data?.data || [];
+    if (!Array.isArray(models) || models.length === 0) return null;
+
+    return models
+      .map((model) => {
+        const caps = Array.isArray(model.capabilities) ? model.capabilities : [];
+        const supportsVision = caps.includes('vision');
+        return {
+          value: model.id,
+          label: model.display_name || model.id,
+          supportsVision,
+          provider: 'Local AI',
+          inputTypes: supportsVision ? ['text', 'image'] : ['text'],
+          supportsReasoning: caps.includes('reasoning') || undefined,
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetches available models from an OpenAI-compatible local server.
+ * Throws on failure (no silent fake fallback) so callers can surface the
+ * real connection problem instead of showing phantom model entries.
  */
 export async function fetchLocalModels(baseUrl?: string): Promise<ModelInfo[]> {
   const url = normalizeLocalBaseUrl(baseUrl);
 
   if (!url) {
-    console.warn('Local AI: No server URL provided');
-    return [];
+    throw new Error('No local AI server URL provided');
+  }
+
+  // Prefer LM Studio's capability-aware endpoint when available
+  const origin = localServerOrigin(url);
+  if (origin) {
+    const v0Models = await fetchLMStudioV0Models(origin);
+    if (v0Models && v0Models.length > 0) {
+      console.log(`Local AI: Models found via /api/v0/models: ${v0Models.length}`);
+      console.log('Local AI models:', v0Models.map(m => `${m.label}${m.supportsVision ? '' : ' (no vision)'}`));
+      return v0Models;
+    }
   }
 
   try {
     const response = await fetch(`${url}/models`);
 
     if (!response.ok) {
-      throw new Error(`Local AI API error: ${response.statusText}`);
+      throw new Error(`Local AI server responded ${response.status} ${response.statusText} at ${url}/models`);
     }
 
     const data = await response.json();
     const models: LMStudioModel[] = data.data || [];
 
+    if (!Array.isArray(models)) {
+      throw new Error('Local AI server returned an unexpected response format');
+    }
+
     console.log(`Local AI: Total models fetched: ${models.length}`);
 
+    // Plain /models does not report capabilities — assume vision support
+    // (the user picked the model; errors will surface clearly if wrong).
     const localModels = models
       .map((model) => ({
         value: model.id,
@@ -304,21 +475,12 @@ export async function fetchLocalModels(baseUrl?: string): Promise<ModelInfo[]> {
     console.log('Local AI models:', localModels.map(m => m.label));
 
     return localModels;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching local AI models:', error);
-    return getFallbackLocalModels();
+    throw new Error(
+      `Could not reach local AI server at ${url}. Verify it is running and that the URL includes the correct port.`
+    );
   }
-}
-
-/**
- * Fallback models for local AI (used when API fails or no server)
- */
-function getFallbackLocalModels(): ModelInfo[] {
-  return [
-    { value: 'llama3-vision', label: 'Llama 3 Vision', supportsVision: true, provider: 'Local AI', inputTypes: ['text', 'image'] },
-    { value: 'qwen2-vl', label: 'Qwen2 VL', supportsVision: true, provider: 'Local AI', inputTypes: ['text', 'image'] },
-    { value: 'phi3-vision', label: 'Phi-3 Vision', supportsVision: true, provider: 'Local AI', inputTypes: ['text', 'image'] },
-  ];
 }
 
 export async function checkLocalModelConnection(baseUrl?: string): Promise<boolean> {

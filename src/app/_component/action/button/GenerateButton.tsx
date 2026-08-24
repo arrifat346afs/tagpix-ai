@@ -3,6 +3,8 @@ import React from 'react';
 import { Button } from "@/components/ui/button";
 import { useSettings } from '@/app/contexts/SettingsContext';
 import { generateMetadata } from '@/app/lib/ai';
+import { beginGeneration, endGeneration } from '@/app/lib/generationControl';
+import { CANCELLED_MESSAGE } from '@/app/lib/ai/api-client';
 import { getActiveTemplate } from '@/app/lib/templateUtils';
 import { embedMetadata } from '@/app/lib/tauri-commands';
 import { matchCategories } from '@/app/lib/categoryMatcher';
@@ -80,7 +82,7 @@ const GenerateButtonComponent = () => {
   }, [generationProgress.cancelRequested]);
 
   // Process a single item with all logic (metadata generation, embedding, etc.)
-  const processSingleItem = async (item: any, index: number, total: number, provider: any, model: string | undefined, apiKey: string, useLocalModel: boolean, localModelName: string | undefined, localApiUrl: string | undefined) => {
+  const processSingleItem = async (item: any, index: number, total: number, provider: any, model: string | undefined, apiKey: string, useLocalModel: boolean, localModelName: string | undefined, localApiUrl: string | undefined, signal?: AbortSignal) => {
     // Update progress for this item
     setGenerationProgress({
       currentIndex: index + 1,
@@ -103,6 +105,7 @@ const GenerateButtonComponent = () => {
         useLocalModel,
         localModelName,
         localApiUrl,
+        signal,
         limits: {
           titleLimit: metadataLimits.titleLimit,
           descriptionLimit: metadataLimits.descriptionLimit,
@@ -187,7 +190,13 @@ const GenerateButtonComponent = () => {
       return { success: true, result };
 
     } catch (error) {
-      console.error(`❌ Failed to generate metadata for ${item.file.name}:`, error);
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (message === CANCELLED_MESSAGE) {
+        console.log(`🛑 Cancelled while generating ${item.file.name}`);
+      } else {
+        console.error(`❌ Failed to generate metadata for ${item.file.name}:`, error);
+      }
 
       // Don't store error messages as metadata - just log the error
       // The thumbnail will show a red border indicating generation was attempted but failed
@@ -203,31 +212,46 @@ const GenerateButtonComponent = () => {
     }
   };
 
+  // Resolve early when the signal aborts so cancellation isn't stuck waiting out the delay
+  const delayWithSignal = (ms: number, signal?: AbortSignal) =>
+    new Promise<void>((resolve) => {
+      const onAbort = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      if (signal?.aborted) return onAbort();
+      signal?.addEventListener('abort', onAbort);
+    });
+
   // Process items sequentially (current behavior)
-  const processItemsSequential = async (items: any[], provider: any, model: string | undefined, apiKey: string, useLocalModel: boolean, localModelName: string | undefined, localApiUrl: string | undefined) => {
+  const processItemsSequential = async (items: any[], provider: any, model: string | undefined, apiKey: string, useLocalModel: boolean, localModelName: string | undefined, localApiUrl: string | undefined, signal?: AbortSignal) => {
     for (let i = 0; i < items.length; i++) {
       // Check if cancellation was requested
-      if (cancelRequestedRef.current) {
+      if (signal?.aborted || cancelRequestedRef.current) {
         console.log('🛑 Generation cancelled by user');
         break;
       }
 
-      await processSingleItem(items[i], i, items.length, provider, model, apiKey, useLocalModel, localModelName, localApiUrl);
+      await processSingleItem(items[i], i, items.length, provider, model, apiKey, useLocalModel, localModelName, localApiUrl, signal);
 
       // Apply delay before next request (except for last item)
       if (i < items.length - 1 && api.requestDelay > 0) {
         console.log(`⏱️ Waiting ${api.requestDelay}ms before next request...`);
-        await new Promise(resolve => setTimeout(resolve, api.requestDelay));
+        await delayWithSignal(api.requestDelay, signal);
       }
     }
   };
 
   // Process items in parallel (similar to batchFolder system)
-  const processItemsParallel = async (items: any[], workers: number, provider: any, model: string | undefined, apiKey: string, useLocalModel: boolean, localModelName: string | undefined, localApiUrl: string | undefined) => {
+  const processItemsParallel = async (items: any[], workers: number, provider: any, model: string | undefined, apiKey: string, useLocalModel: boolean, localModelName: string | undefined, localApiUrl: string | undefined, signal?: AbortSignal) => {
     // Process items in batches starting from the beginning
     for (let i = 0; i < items.length; i += workers) {
       // Check if cancellation was requested
-      if (cancelRequestedRef.current) {
+      if (signal?.aborted || cancelRequestedRef.current) {
         console.log('🛑 Parallel processing cancelled by user');
         break;
       }
@@ -236,9 +260,9 @@ const GenerateButtonComponent = () => {
       
       // Process batch concurrently
       const batchPromises = batch.map(async (item) => {
-        if (!cancelRequestedRef.current) {
+        if (!signal?.aborted && !cancelRequestedRef.current) {
           const itemIndex = i + items.indexOf(item);
-          return processSingleItem(item, itemIndex, items.length, provider, model, apiKey, useLocalModel, localModelName, localApiUrl);
+          return processSingleItem(item, itemIndex, items.length, provider, model, apiKey, useLocalModel, localModelName, localApiUrl, signal);
         }
         return { success: false, error: 'Cancelled' };
       });
@@ -254,7 +278,7 @@ const GenerateButtonComponent = () => {
       // Apply delay after each batch (except for last batch)
       if (i + workers < items.length && api.requestDelay > 0) {
         console.log(`⏱️ Waiting ${api.requestDelay}ms before next batch...`);
-        await new Promise(resolve => setTimeout(resolve, api.requestDelay));
+        await delayWithSignal(api.requestDelay, signal);
       }
     }
   };
@@ -348,22 +372,29 @@ const GenerateButtonComponent = () => {
     console.log(`⏱️ Request delay: ${api.requestDelay}ms`);
     console.log(`🎯 Processing mode: ${processingMode}`);
 
-    // Process items based on selected mode
-    if (processingMode === 'parallel') {
-      await processItemsParallel(items, parallelWorkers, provider, model, apiKey!, useLocalModel, localModelName, localApiUrl);
-    } else {
-      await processItemsSequential(items, provider, model, apiKey!, useLocalModel, localModelName, localApiUrl);
-    }
+    // Enable mid-request cancellation via the Cancel button
+    const signal = beginGeneration();
 
-    const wasCancelled = generationProgress.cancelRequested;
-    console.log(wasCancelled ? '🛑 Metadata generation cancelled!' : '✅ Metadata generation complete for all files!');
-    setGenerationProgress({
-      isGenerating: false,
-      currentIndex: 0,
-      currentFileName: '',
-      totalFiles: 0,
-      cancelRequested: false,
-    });
+    // Process items based on selected mode; always tear down generation state
+    try {
+      if (processingMode === 'parallel') {
+        await processItemsParallel(items, parallelWorkers, provider, model, apiKey!, useLocalModel, localModelName, localApiUrl, signal);
+      } else {
+        await processItemsSequential(items, provider, model, apiKey!, useLocalModel, localModelName, localApiUrl, signal);
+      }
+    } finally {
+      endGeneration();
+
+      const wasCancelled = generationProgress.cancelRequested;
+      console.log(wasCancelled ? '🛑 Metadata generation cancelled!' : '✅ Metadata generation complete for all files!');
+      setGenerationProgress({
+        isGenerating: false,
+        currentIndex: 0,
+        currentFileName: '',
+        totalFiles: 0,
+        cancelRequested: false,
+      });
+    }
   };
 
   const buttonText = thumbnails.isGenerating

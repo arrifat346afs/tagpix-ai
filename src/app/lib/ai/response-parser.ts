@@ -33,13 +33,25 @@ export const extractTextFromResponse = (response: any): string => {
 };
 
 /**
- * Normalizes a raw AI response by stripping markdown code fences
- * and surrounding whitespace so the JSON object can be located reliably.
+ * Removes reasoning ("thinking") blocks that local models such as DeepSeek-R1
+ * or Qwen3 emit around (or instead of) their final answer.
+ * Handles unclosed blocks too — a `<think>` run that consumed the whole token
+ * budget leaves no closing tag behind.
+ * @param text - The raw AI response text
+ * @returns The text without think blocks
+ */
+export const stripThinkBlocks = (text: string): string =>
+  text.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<think>[\s\S]*$/i, '');
+
+/**
+ * Normalizes a raw AI response by stripping markdown code fences,
+ * reasoning (<think>) blocks and surrounding whitespace so the JSON object
+ * can be located reliably.
  * @param text - The raw AI response text
  * @returns The cleaned text
  */
 export const cleanAIResponse = (text: string): string => {
-  let cleaned = text.trim();
+  let cleaned = stripThinkBlocks(text).trim();
 
   // Remove leading ```json / ``` fences
   cleaned = cleaned.replace(/^```(?:json)?\s*/i, '');
