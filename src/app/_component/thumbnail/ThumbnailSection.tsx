@@ -1,6 +1,6 @@
 import { useRef, useMemo, useState, useCallback, useEffect } from "react";
 import { useSettings } from "@/app/contexts/SettingsContext";
-import { useAppSelector } from "@/store/hooks";
+import { useUiStore } from "@/store/uiStore";
 import { MdOutlineImageNotSupported } from "react-icons/md";
 import { Upload } from "lucide-react";
 import { ThumbnailScrollContainer } from "./ThumbnailScrollContainer";
@@ -33,7 +33,7 @@ const ThumbnailSection = ({ onSelectFile }: ThumbnailSectionProps) => {
     filePaths,
   } = useSettings();
   
-  const activeTab = useAppSelector(state => state.ui.activeLeftTab);
+  const activeTab = useUiStore((state) => state.activeLeftTab);
 
   // Stable reference: generated.setMetadata only depends on dispatch, never changes
   const setMetadata = generated.setMetadata;

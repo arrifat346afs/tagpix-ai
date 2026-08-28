@@ -27,7 +27,6 @@
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "@reduxjs/toolkit": "^2.12.0",
     "@tailwindcss/vite": "^4.3.0",
     "@tauri-apps/api": "~2.9.1",
     "@tauri-apps/plugin-dialog": "~2.4.2",
@@ -55,14 +54,13 @@
     "react-dom": "^18.3.1",
     "react-dropzone": "^14.4.1",
     "react-icons": "^5.6.0",
-    "react-redux": "^9.3.0",
-    "redux-persist": "^6.0.0",
     "shadcn": "^4.8.0",
     "smooth-scroll-into-view-if-needed": "^2.0.2",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.0",
-    "thumbo": "^1.0.8"
+    "thumbo": "^1.0.8",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@tauri-apps/cli": "~2.9.6",

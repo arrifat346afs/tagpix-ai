@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { apiCostTracker } from "@/app/lib/apiCostTracker";
 import { formatCost, getModelPriceInfo, formatModelPrice } from "@/app/lib/apiCost";
 import { refreshModelPricing } from "@/app/lib/modelFetcher";
-import { useAppSelector } from "@/store/hooks";
+import { useConfigStore } from "@/store/configStore";
 import { cn } from "@/lib/utils";
 
 type ApiCostBadgeProps = {
@@ -25,7 +25,7 @@ export const ApiCostBadge = ({ className }: ApiCostBadgeProps) => {
   );
 
   const { selectedProvider, selectedModel, apiKeys, useLocalModel, localModelName, localApiUrl } =
-    useAppSelector((state) => state.config.api);
+    useConfigStore((state) => state.api);
 
   const [isLoadingPricing, setIsLoadingPricing] = useState(false);
 
