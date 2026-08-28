@@ -69,6 +69,7 @@ interface BatchProcessStore extends BatchProcessState {
   completeBatchProcess: () => void;
   pauseBatchProcess: () => void;
   resumeBatchProcess: () => void;
+  restoreBatchProcess: (saved: BatchProcessState) => void;
   failBatchProcess: (error: string) => void;
   cancelBatchProcess: () => void;
   resetBatchProcess: () => void;
@@ -224,6 +225,24 @@ export const useBatchProcessStore = create<BatchProcessStore>()(
         state.overallStatus = 'processing';
       }),
 
+    // Copies saved batch-progress fields (from localStorage) into the store so
+    // resumed runs show the restored folders/counters instead of stale state.
+    restoreBatchProcess: (saved) =>
+      set((state) => {
+        state.isProcessing = saved.isProcessing;
+        state.overallStatus = saved.overallStatus;
+        state.currentFolderIndex = saved.currentFolderIndex;
+        state.totalFolders = saved.totalFolders;
+        state.totalImages = saved.totalImages;
+        state.completedImages = saved.completedImages;
+        state.failedImages = saved.failedImages;
+        state.folders = saved.folders;
+        state.processingMode = saved.processingMode;
+        state.currentStage = null;
+        state.error = undefined;
+        state.startTime = undefined;
+      }),
+
     failBatchProcess: (error) =>
       set((state) => {
         state.isProcessing = false;
@@ -270,6 +289,7 @@ export const markFolderExported = useBatchProcessStore.getState().markFolderExpo
 export const completeBatchProcess = useBatchProcessStore.getState().completeBatchProcess;
 export const pauseBatchProcess = useBatchProcessStore.getState().pauseBatchProcess;
 export const resumeBatchProcess = useBatchProcessStore.getState().resumeBatchProcess;
+export const restoreBatchProcess = useBatchProcessStore.getState().restoreBatchProcess;
 export const failBatchProcess = useBatchProcessStore.getState().failBatchProcess;
 export const cancelBatchProcess = useBatchProcessStore.getState().cancelBatchProcess;
 export const resetBatchProcess = useBatchProcessStore.getState().resetBatchProcess;

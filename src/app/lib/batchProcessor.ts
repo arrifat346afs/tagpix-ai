@@ -20,6 +20,7 @@ import {
   updateFilePath,
   pauseBatchProcess,
   resumeBatchProcess,
+  restoreBatchProcess,
   resetBatchProcess,
   type FolderProcessingState,
   type BatchProcessState,
@@ -567,6 +568,9 @@ export async function startBatchProcessing(
   
   // Initialize batch process state
   if (resumeFromState) {
+    // Write the saved folders/counters into the store before resuming so the
+    // UI and the processing loop see the restored progress, not stale state.
+    dispatch(restoreBatchProcess(resumeFromState));
     dispatch(resumeBatchProcess());
   } else {
     dispatch(startBatchProcess({ 
