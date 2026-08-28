@@ -23,7 +23,7 @@ import type { UserTemplate } from "@/app/contexts/SettingsContext";
 import type {
   FolderProcessingState,
   ImageProcessingState,
-} from "@/store/slices/batchProcessSlice";
+} from "@/store/batchProcessStore";
 
 export type BatchProcessingState =
   | "scanning"

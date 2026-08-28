@@ -1,12 +1,28 @@
 import { createContext, useContext, ReactNode, useCallback, useMemo, useEffect, useRef } from 'react';
-import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import * as configSlice from '../../store/slices/configSlice';
-import * as fileSlice from '../../store/slices/fileSlice';
-import * as metadataSlice from '../../store/slices/metadataSlice';
-import * as templateSlice from '../../store/slices/templateSlice';
-import * as uiSlice from '../../store/slices/uiSlice';
-import * as batchSlice from '../../store/slices/batchSlice';
+import { useConfigStore } from '../../store/configStore';
+import { useFileStore } from '../../store/fileStore';
+import { useMetadataStore } from '../../store/metadataStore';
+import { useTemplateStore } from '../../store/templateStore';
+import { useUiStore } from '../../store/uiStore';
+import { useBatchStore } from '../../store/batchStore';
+import * as configSlice from '../../store/configStore';
+import * as fileSlice from '../../store/fileStore';
+import * as metadataSlice from '../../store/metadataStore';
+import * as templateSlice from '../../store/templateStore';
+import * as uiSlice from '../../store/uiStore';
+import * as batchSlice from '../../store/batchStore';
 import { BATCH_CONFIG } from '@/app/lib/thumbnailGenerator';
+
+/**
+ * Zustand migration adapter: Zustand actions execute immediately when called,
+ * so there is no dispatch step. This no-op keeps the existing
+ * `dispatch(action(payload))` call style in this file working unchanged — the
+ * inner action call performs the state update and `dispatch` discards the
+ * (void) result. Gradually replace `dispatch(xSlice.action(...))` with a
+ * direct `xSlice.action(...)` call and remove this adapter.
+ */
+const dispatch = (_action: void): void => {};
+
 
 // Re-export types from slices to maintain compatibility
 export type Provider = configSlice.Provider;
@@ -120,15 +136,14 @@ export type SettingsContextType = {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export const SettingsProvider = ({ children }: { children: ReactNode }) => {
-  const dispatch = useAppDispatch();
-
   // Selectors
-  const config = useAppSelector((state) => state.config);
-  const fileState = useAppSelector((state) => state.file);
-  const metadataState = useAppSelector((state) => state.metadata);
-  const templateState = useAppSelector((state) => state.template);
-  const uiState = useAppSelector((state) => state.ui);
-  const batchState = useAppSelector((state) => state.batch);
+  const config = useConfigStore();
+  const fileState = useFileStore();
+  const metadataState = useMetadataStore();
+  const templateState = useTemplateStore();
+  const uiState = useUiStore();
+  const batchState = useBatchStore();
+
 
   // --- API ---
   const setSelectedProvider = useCallback((provider: Provider | '') => {

@@ -7,7 +7,6 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
-import { store } from '@/store/store';
 import {
   startBatchProcess,
   updateFolderStatus,
@@ -21,16 +20,30 @@ import {
   updateFilePath,
   pauseBatchProcess,
   resumeBatchProcess,
+  restoreBatchProcess,
   resetBatchProcess,
   type FolderProcessingState,
   type BatchProcessState,
-} from '@/store/slices/batchProcessSlice';
-import { updateFolder } from '@/store/slices/batchSlice';
+} from '@/store/batchProcessStore';
+import { useBatchProcessStore } from '@/store/batchProcessStore';
+import { updateFolder } from '@/store/batchStore';
 import type { FolderInfo } from '@/app/_component/batch/FolderInfoCard';
 import { generateMetadata, type GeneratedMetadata } from './ai';
 import { getTemplateById } from './templateUtils';
 import type { FileMetadata, CategorySelection } from './exportUtils';
 import { toast } from 'sonner';
+
+/**
+ * Zustand migration adapter: Zustand actions execute immediately when called,
+ * so there is no dispatch step. This no-op keeps the existing
+ * `dispatch(action(payload))` call style in this file working unchanged — the
+ * inner action call performs the state update and `dispatch` discards the
+ * (void) result. Gradually replace `dispatch(action(...))` with a direct
+ * `action(...)` call and remove this adapter.
+ */
+export type DispatchFn = (action: void) => void;
+const dispatch: DispatchFn = () => {};
+
 
 // Cancellation flag
 let isCancelled = false;
@@ -171,7 +184,7 @@ async function processFolderSequential(
   folderInfo: FolderInfo,
   filePathMap: Map<File, string>,
   config: BatchConfig,
-  dispatch: typeof store.dispatch,
+  dispatch: DispatchFn,
   startFromIndex: number = 0
 ): Promise<void> {
   console.log('🎯 ENTER processFolderSequential - FIRST LINE');
@@ -264,7 +277,7 @@ async function processFolderParallel(
   filePathMap: Map<File, string>,
   config: BatchConfig,
   parallelWorkers: number,
-  dispatch: typeof store.dispatch,
+  dispatch: DispatchFn,
   startFromIndex: number = 0
 ): Promise<void> {
   const imageFiles = folderInfo.files.filter(f => f.type.startsWith('image/'));
@@ -520,7 +533,7 @@ export async function startBatchProcessing(
   savedExportPath: string | null,
   resumeFromState?: BatchProcessState
 ): Promise<void> {
-  const dispatch = store.dispatch;
+
   
   // Reset cancellation flag
   isCancelled = false;
@@ -555,6 +568,9 @@ export async function startBatchProcessing(
   
   // Initialize batch process state
   if (resumeFromState) {
+    // Write the saved folders/counters into the store before resuming so the
+    // UI and the processing loop see the restored progress, not stale state.
+    dispatch(restoreBatchProcess(resumeFromState));
     dispatch(resumeBatchProcess());
   } else {
     dispatch(startBatchProcess({ 
@@ -584,13 +600,13 @@ export async function startBatchProcessing(
       if (!shouldContinue()) {
         console.log('⏸️ Batch processing paused by user');
         dispatch(pauseBatchProcess());
-        saveBatchProgress(store.getState().batchProcess);
+        saveBatchProgress(useBatchProcessStore.getState());
         toast.info('Batch processing paused. You can resume later.');
         return;
       }
       
       const folderInfo = readyFolders[folderIndex];
-      const batchProcessState = store.getState().batchProcess;
+      const batchProcessState = useBatchProcessStore.getState();
       const folderState = batchProcessState.folders[folderIndex];
       
       if (!folderState) {
@@ -661,7 +677,7 @@ export async function startBatchProcessing(
       if (!shouldContinue()) {
         console.log('⏸️ Batch processing paused during folder processing');
         dispatch(pauseBatchProcess());
-        saveBatchProgress(store.getState().batchProcess);
+        saveBatchProgress(useBatchProcessStore.getState());
         toast.info('Batch processing paused. You can resume later.');
         return;
       }
@@ -695,14 +711,14 @@ export async function startBatchProcessing(
       console.log(`✅ Completed folder: ${folderInfo.folderPath}`);
       
       // Save progress after each folder
-      saveBatchProgress(store.getState().batchProcess);
+      saveBatchProgress(useBatchProcessStore.getState());
     }
     
     // Complete the batch process
     dispatch(completeBatchProcess());
     clearBatchProgress(); // Clear saved progress on successful completion
     
-    const finalState = store.getState().batchProcess;
+    const finalState = useBatchProcessStore.getState();
     toast.success(
       `Batch processing complete! ${finalState.completedImages} images processed, ${finalState.failedImages} failed.`
     );
@@ -711,7 +727,7 @@ export async function startBatchProcessing(
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('❌ Batch processing failed:', errorMessage);
     dispatch(failBatchProcess(errorMessage));
-    saveBatchProgress(store.getState().batchProcess); // Save progress even on error
+    saveBatchProgress(useBatchProcessStore.getState()); // Save progress even on error
     toast.error(`Batch processing failed: ${errorMessage}`);
   }
 }
@@ -719,8 +735,8 @@ export async function startBatchProcessing(
 // Cancel ongoing batch processing
 export function cancelBatchProcessing(): void {
   isCancelled = true;
-  store.dispatch(pauseBatchProcess());
-  saveBatchProgress(store.getState().batchProcess);
+  dispatch(pauseBatchProcess());
+  saveBatchProgress(useBatchProcessStore.getState());
   toast.info('Batch processing cancelled. Progress saved.');
 }
 
@@ -772,6 +788,6 @@ export async function resumeBatchProcessing(
 export function resetBatchProcessing(): void {
   isCancelled = false;
   clearBatchProgress();
-  store.dispatch(resetBatchProcess());
+  dispatch(resetBatchProcess());
   toast.info('Batch processing reset');
 }
