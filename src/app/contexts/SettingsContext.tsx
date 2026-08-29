@@ -555,12 +555,14 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
     })();
   }, [fileState.files]); // Only depend on files
 
-  // Ensure export settings are properly initialized
+  // Ensure export settings are fully initialized (only fill in missing values;
+  // never override values the user has explicitly turned off)
   useEffect(() => {
-    if (!config.exportSettings || config.exportSettings.shutterStock === false) {
+    const es = config.exportSettings;
+    if (!es || es.adobeStock === undefined || es.shutterStock === undefined) {
       dispatch(configSlice.setExportSettings({
-        adobeStock: true,
-        shutterStock: true,
+        adobeStock: es?.adobeStock ?? true,
+        shutterStock: es?.shutterStock ?? true,
       }));
     }
   }, [config.exportSettings, dispatch]);
