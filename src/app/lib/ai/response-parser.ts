@@ -3,7 +3,7 @@
  * Handles extraction and parsing of JSON format from AI API responses
  */
 
-import { extractKeywordsFromTitle } from '../keywordUtils';
+import { extractKeywordsFromTitle } from '../metadata/keywordUtils';
 
 export type ParsedMetadata = {
   title: string;

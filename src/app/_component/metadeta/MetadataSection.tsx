@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { useSettings } from '@/app/contexts/SettingsContext';
 import { generateMetadata } from '@/app/lib/ai';
-import { embedMetadata } from '@/app/lib/tauri-commands';
+import { embedMetadata } from '@/app/lib/tauri/tauri-commands';
 import { useState } from "react";
 import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";

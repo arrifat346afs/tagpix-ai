@@ -7,7 +7,7 @@ import { generateMetadataPrompt } from './ai/prompts';
 import { parseMetadataResponse } from './ai/response-parser';
 import { ensureBase64, callAIApi, createVisionMessageContent, callLocalOpenAICompatible, createLocalMessageContent, type AIResponse, type AIUsage } from './ai/api-client';
 import { generateAIImage } from './thumbnailGenerator';
-import { apiCostTracker } from './apiCostTracker';
+import { apiCostTracker } from './cost/apiCostTracker';
 // Provider-specific configs can be kept if they have useful constants, but factory functions are no longer needed
 import { DEFAULT_OPENAI_MODEL } from './ai/providers/openai';
 import { DEFAULT_OPENROUTER_MODEL } from './ai/providers/openrouter';

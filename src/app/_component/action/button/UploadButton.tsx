@@ -5,7 +5,7 @@ import { useSettings } from "@/app/contexts/SettingsContext";
 import { UploadIcon } from "@/components/ui/upload";
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from "@tauri-apps/plugin-fs";
-import { readExifMetadata } from "@/app/lib/tauri-commands";
+import { readExifMetadata } from "@/app/lib/tauri/tauri-commands";
 
 // Convert a file path to a File object with proper MIME type
 // For videos, we create a lightweight File without loading content (backend reads from path)

@@ -6,8 +6,8 @@
  * model's pricing metadata (fetched from the provider) or a static table.
  */
 
-import type { AIUsage } from './ai/api-client';
-import { getCachedModelMetadata, type ModelPricing } from './modelFetcher';
+import type { AIUsage } from '../ai/api-client';
+import { getCachedModelMetadata, type ModelPricing } from '../models/modelFetcher';
 
 /** USD per 1M tokens for providers that don't report exact cost. */
 const PRICING_TABLE: Record<string, { prompt: number; completion: number }> = {

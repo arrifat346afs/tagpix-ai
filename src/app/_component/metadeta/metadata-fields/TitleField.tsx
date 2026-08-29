@@ -1,6 +1,6 @@
 import { Textarea } from "@/components/ui/textarea";
 import { useSettings } from '@/app/contexts/SettingsContext';
-import { extractKeywordsFromTitle } from "@/app/lib/keywordUtils";
+import { extractKeywordsFromTitle } from "@/app/lib/metadata/keywordUtils";
 import { memo } from "react";
 
 

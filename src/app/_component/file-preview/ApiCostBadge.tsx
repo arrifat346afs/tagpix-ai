@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Badge } from "@/components/ui/badge";
-import { apiCostTracker } from "@/app/lib/apiCostTracker";
-import { formatCost, getModelPriceInfo, formatModelPrice } from "@/app/lib/apiCost";
-import { refreshModelPricing } from "@/app/lib/modelFetcher";
+import { apiCostTracker } from "@/app/lib/cost/apiCostTracker";
+import { formatCost, getModelPriceInfo, formatModelPrice } from "@/app/lib/cost/apiCost";
+import { refreshModelPricing } from "@/app/lib/models/modelFetcher";
 import { useConfigStore } from "@/store/configStore";
 import { cn } from "@/lib/utils";
 

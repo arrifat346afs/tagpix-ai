@@ -3,7 +3,7 @@ import { useSettings } from "@/app/contexts/SettingsContext";
 import { useState } from "react";
 import React from "react";
 import { toast } from "sonner";
-import { exportToMultipleFormats } from "@/app/lib/exportUtils";
+import { exportToMultipleFormats } from "@/app/lib/export/exportUtils";
 // import { Download } from "lucide-react";
 import { DownloadIcon } from "@/components/ui/download";
 

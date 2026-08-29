@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getCacheInfo, clearCacheDirectory, CacheDirectory } from "@/app/lib/tauri-commands";
+import { getCacheInfo, clearCacheDirectory, CacheDirectory } from "@/app/lib/tauri/tauri-commands";
 import { Button } from "@/components/ui/button";
 import { Trash2, HardDrive, Loader2, Monitor, Apple, Circle } from "lucide-react";
 

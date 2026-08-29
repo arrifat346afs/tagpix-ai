@@ -5,7 +5,7 @@
  */
 import { toast } from "sonner";
 import { fetch } from "@tauri-apps/plugin-http";
-import { normalizeLocalBaseUrl } from "../modelFetcher";
+import { normalizeLocalBaseUrl } from "../models/modelFetcher";
 import { stripThinkBlocks } from "./response-parser";
 
 export type MessageContent = {

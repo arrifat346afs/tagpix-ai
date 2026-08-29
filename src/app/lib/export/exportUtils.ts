@@ -5,7 +5,7 @@
 
 import { writeTextFile } from '@tauri-apps/plugin-fs';
 import { save } from '@tauri-apps/plugin-dialog';
-import { ADOBE_STOCK_CATEGORIES } from './categoryMatcher';
+import { ADOBE_STOCK_CATEGORIES } from '../metadata/categoryMatcher';
 
 export type FileMetadata = {
   file: File;

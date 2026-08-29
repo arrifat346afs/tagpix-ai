@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSettings } from '@/app/contexts/SettingsContext';
-import { DEFAULT_TEMPLATES, validateTemplate, interpolateTemplate } from '@/app/lib/templateUtils';
+import { DEFAULT_TEMPLATES, validateTemplate, interpolateTemplate } from '@/app/lib/metadata/templateUtils';
 import { Trash2, Edit, Eye, Plus, Check, RotateCcw } from 'lucide-react';
 
 export const TemplateManager = () => {

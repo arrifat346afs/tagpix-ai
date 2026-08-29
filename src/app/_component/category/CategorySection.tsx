@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useSettings } from "@/app/contexts/SettingsContext";
-import { matchCategories } from "@/app/lib/categoryMatcher";
+import { matchCategories } from "@/app/lib/metadata/categoryMatcher";
 
 export const CategorySection = () => {
   const { categories, setCategories, selectedFile, generated } = useSettings();

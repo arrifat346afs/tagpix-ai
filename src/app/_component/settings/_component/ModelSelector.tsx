@@ -11,7 +11,7 @@ import {
     CommandItem,
     CommandList,
 } from "@/components/ui/command";
-import type { ModelInfo } from "@/app/lib/modelFetcher";
+import type { ModelInfo } from "@/app/lib/models/modelFetcher";
 
 interface ModelSelectorProps {
     models: ModelInfo[];

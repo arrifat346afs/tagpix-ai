@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/app/contexts/SettingsContext";
-import { cancelGeneration } from "@/app/lib/generationControl";
+import { cancelGeneration } from "@/app/lib/generation/generationControl";
 import { X } from "lucide-react";
 import React from "react";
 

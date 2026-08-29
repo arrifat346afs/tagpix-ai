@@ -7,7 +7,7 @@ import { ThumbnailScrollContainer } from "./ThumbnailScrollContainer";
 import { CustomInstructionDialog } from "./CustomInstructionDialog";
 import { generateMetadata } from "@/app/lib/ai";
 import { generateImageThumbnail } from "@/app/lib/thumbnailGenerator";
-import { readExifMetadata } from "@/app/lib/tauri-commands";
+import { readExifMetadata } from "@/app/lib/tauri/tauri-commands";
 import { ThumbnailItem } from "./ThumbnailItem";
 import { useAutoScroll, useKeyboardAutoScroll, useDragAndDrop, useVirtualization, useKeyboardNavigation } from "./hooks";
 

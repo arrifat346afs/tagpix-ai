@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { fetchOpenRouterModels, fetchGeminiModels, fetchLocalModels, checkLocalModelConnection, type ModelInfo } from '@/app/lib/modelFetcher';
+import { fetchOpenRouterModels, fetchGeminiModels, fetchLocalModels, checkLocalModelConnection, type ModelInfo } from '@/app/lib/models/modelFetcher';
 import { ModelSelector } from './ModelSelector';
 
 type Provider = 'openai' | 'gemini' | 'mistral' | 'groq' | 'openrouter';

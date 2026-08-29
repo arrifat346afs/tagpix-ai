@@ -4,7 +4,7 @@
  * Resets automatically on restart (nothing is persisted).
  */
 
-import type { AIUsage } from './ai/api-client';
+import type { AIUsage } from '../ai/api-client';
 import { computeCost } from './apiCost';
 
 export type CostSnapshot = {

@@ -9,7 +9,7 @@ export type MetadataLimits = {
   keywordLimit?: number;
 };
 
-import { interpolateTemplate, TemplateVariables } from '../templateUtils';
+import { interpolateTemplate, TemplateVariables } from '../metadata/templateUtils';
 
 /**
  * Generates a metadata generation prompt based on the provided limits

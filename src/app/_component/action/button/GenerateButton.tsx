@@ -3,11 +3,11 @@ import React from 'react';
 import { Button } from "@/components/ui/button";
 import { useSettings } from '@/app/contexts/SettingsContext';
 import { generateMetadata } from '@/app/lib/ai';
-import { beginGeneration, endGeneration } from '@/app/lib/generationControl';
+import { beginGeneration, endGeneration } from '@/app/lib/generation/generationControl';
 import { CANCELLED_MESSAGE } from '@/app/lib/ai/api-client';
-import { getActiveTemplate } from '@/app/lib/templateUtils';
-import { embedMetadata } from '@/app/lib/tauri-commands';
-import { matchCategories } from '@/app/lib/categoryMatcher';
+import { getActiveTemplate } from '@/app/lib/metadata/templateUtils';
+import { embedMetadata } from '@/app/lib/tauri/tauri-commands';
+import { matchCategories } from '@/app/lib/metadata/categoryMatcher';
 import { TextShimmer } from '@/components/motion-primitives/text-shimmer';
 import { Sparkle } from 'lucide-react';
 
