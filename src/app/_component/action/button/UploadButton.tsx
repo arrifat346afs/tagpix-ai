@@ -6,6 +6,7 @@ import { UploadIcon } from "@/components/ui/upload";
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from "@tauri-apps/plugin-fs";
 import { readExifMetadata } from "@/app/lib/tauri/tauri-commands";
+import { VECTOR_MIME_TYPE } from "@/app/lib/thumbnail/vectorSupport";
 
 // Convert a file path to a File object with proper MIME type
 // For videos, we create a lightweight File without loading content (backend reads from path)
@@ -26,6 +27,7 @@ const fileFromPath = async (path: string, loadContent: boolean = true): Promise<
   const mimeTypes: Record<string, string> = {
     'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
     'gif': 'image/gif', 'webp': 'image/webp', 'svg': 'image/svg+xml',
+    'ai': VECTOR_MIME_TYPE, 'eps': VECTOR_MIME_TYPE,
     'mp4': 'video/mp4', 'mov': 'video/quicktime', 'webm': 'video/webm',
   };
   return new File([data], name, { type: mimeTypes[ext] || '' });
@@ -49,7 +51,7 @@ const UploadButtonComponent = ({ }: UploadButtonProps) => {
       filters: [
         {
           name: "Media",
-          extensions: ["jpg", "jpeg", "png", "gif", "webp", "svg", "mp4", "mov", "webm"]
+          extensions: ["jpg", "jpeg", "png", "gif", "webp", "svg", "ai", "eps", "mp4", "mov", "webm"]
         }
       ]
     });

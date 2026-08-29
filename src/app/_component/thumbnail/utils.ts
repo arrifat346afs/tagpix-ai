@@ -13,6 +13,9 @@ export const getMimeType = (filename: string): string => {
     'bmp': 'image/bmp',
     'tiff': 'image/tiff',
     'svg': 'image/svg+xml',
+    // Vector formats (rasterized server-side via Ghostscript)
+    'ai': 'application/postscript',
+    'eps': 'application/postscript',
     // Videos
     'mp4': 'video/mp4',
     'mov': 'video/quicktime',

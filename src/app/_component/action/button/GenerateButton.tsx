@@ -147,9 +147,12 @@ const GenerateButtonComponent = () => {
       console.log(`✓ Generated metadata for ${item.file.name} (index ${index})`);
       console.log(`📊 Total generated items now:`, generated.items.length);
 
-      // Embed metadata into file if enabled (skip SVG — use CSV export)
+      // Embed metadata into file if enabled (skip SVG & vector formats — use CSV export)
+      const isVectorFile = item.file.type === 'application/postscript' || /\.(ai|eps)$/i.test(item.file.name);
       if (item.file.type === 'image/svg+xml') {
         console.log(`ℹ️ Skipping metadata embedding for SVG file: ${item.file.name} (use CSV export)`);
+      } else if (isVectorFile) {
+        console.log(`ℹ️ Skipping metadata embedding for vector file: ${item.file.name} (use CSV export)`);
       } else if (embedSettings.enabled) {
         const filePath = getFilePath(item.file);
         if (filePath) {

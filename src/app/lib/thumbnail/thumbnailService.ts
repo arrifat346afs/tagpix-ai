@@ -14,6 +14,7 @@ import { thumbnailCache } from './lruCache';
 import { assetUrlToDataUrl, generateImageViaCanvas, resizeViaCanvas } from './imageCanvas';
 import { resolveImageUrl, generateThumbnailRust, generateVideoThumbnailRust, generateVideoPreviewRust } from './rustBridge';
 import { generateVideoThumbnail } from './videoThumbnail';
+import { isVectorFile } from './vectorSupport';
 
 // ---------------------------------------------------------------------------
 // AI vision path (base64 data-URLs for remote providers)
@@ -40,6 +41,20 @@ export async function generateAIImage(file: File, filePath?: string): Promise<st
       return assetUrlToDataUrl(videoThumb);
     }
     return generateVideoThumbnail(file);
+  }
+  // Vector formats (.ai/.eps) cannot be decoded by the browser — rasterize
+  // through the Rust/Ghostscript backend and convert the asset:// URL to base64.
+  if (isVectorFile(file)) {
+    if (filePath) {
+      const vectorThumb = await generateThumbnailRust(filePath, AI_IMAGE_CONFIG.MAX_SIZE);
+      if (vectorThumb) {
+        return assetUrlToDataUrl(vectorThumb);
+      }
+    }
+    throw new Error(
+      `Cannot rasterize vector file "${file.name}". ` +
+      `Ensure Ghostscript is installed and the file was added via a file path.`
+    );
   }
   // Canvas path already returns a data-URL.
   return generateImageViaCanvas(file, AI_IMAGE_CONFIG.MAX_SIZE, AI_IMAGE_CONFIG.JPEG_QUALITY);
@@ -107,7 +122,21 @@ export async function generatePreviewImage(file: File, filePath?: string, signal
 // Image thumbnail path (browser Canvas)
 // ---------------------------------------------------------------------------
 
-export async function generateImageThumbnail(file: File, _filePath?: string): Promise<string> {
+export async function generateImageThumbnail(file: File, filePath?: string): Promise<string> {
+  // Vector formats (.ai/.eps) must be rasterized by the Rust/Ghostscript backend.
+  if (isVectorFile(file)) {
+    if (!filePath) {
+      throw new Error(`Vector file "${file.name}" cannot be rasterized without a file path.`);
+    }
+    const thumbnail = await generateThumbnailRust(filePath, BATCH_CONFIG.MAX_THUMBNAIL_SIZE);
+    if (!thumbnail) {
+      throw new Error(
+        `Ghostscript rasterization failed for "${file.name}". Is Ghostscript installed?`
+      );
+    }
+    return thumbnail;
+  }
+
   // Fast path: pass the File (which IS a Blob) directly to createImageBitmap.
   // Using resizeWidth/resizeHeight hints lets the browser decode at the target
   // size — far cheaper than decoding full-resolution then scaling in JS.
@@ -162,7 +191,7 @@ export async function generateThumbnailsBatch(
       try {
         let thumbnail: string | null = null;
 
-        if (file.type.startsWith('image/')) {
+        if (file.type.startsWith('image/') || isVectorFile(file)) {
           thumbnail = await generateImageThumbnail(file, filePath);
         } else if (file.type.startsWith('video/')) {
           if (filePath) {

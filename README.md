@@ -40,6 +40,7 @@ Descify is a cross-platform desktop application that **generates titles, keyword
 - **Parallel mode** — process up to 5 images simultaneously with paid API keys
 - Configurable **request delay** (0–10s) between AI requests
 - ExifTool integration for embedding metadata directly into image files
+- **Vector file support** — `.ai` (Adobe Illustrator) and `.eps` files are accepted and rasterized via Ghostscript for thumbnails and AI analysis (metadata embedding is skipped for these formats — use CSV export instead)
 
 ### Management
 - Secure API key storage (Gemini & OpenRouter)
@@ -52,6 +53,10 @@ Descify is a cross-platform desktop application that **generates titles, keyword
 - [Node.js](https://nodejs.org/) (v18+) and [Bun](https://bun.sh/)
 - [Rust](https://www.rust-lang.org/) and Cargo (for Tauri)
 - [ExifTool](https://exiftool.org/) (optional, for metadata embedding)
+- [Ghostscript](https://ghostscript.com/) (optional, for `.ai`/`.eps` vector file support)
+
+> [!NOTE]
+> Ghostscript is detected at runtime and is never bundled with the app. Linux: `sudo apt install ghostscript` · macOS: `brew install ghostscript` · Windows: download from [ghostscript.com/releases](https://ghostscript.com/releases/gsdnld.html). Without it, `.ai`/`.eps` files cannot be rasterized for thumbnails or AI analysis.
 
 ### Installation
 

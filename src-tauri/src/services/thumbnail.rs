@@ -15,6 +15,7 @@ use image::{DynamicImage, ImageReader};
 use lazy_static::lazy_static;
 
 use crate::services::gpu_thumbnail;
+use crate::services::vector;
 
 lazy_static! {
     static ref VIDEO_GEN_LOCK: Mutex<()> = Mutex::new(());
@@ -117,7 +118,7 @@ fn read_image_from_file(path: &PathBuf) -> Option<DynamicImage> {
         .ok()
 }
 
-fn resize_image(img: &DynamicImage, target_size: u32) -> DynamicImage {
+pub(crate) fn resize_image(img: &DynamicImage, target_size: u32) -> DynamicImage {
     let (w, h) = img.dimensions();
     let max_dim = w.max(h);
 
@@ -225,16 +226,34 @@ pub fn generate_thumbnail(file_path: &str, target_size: u32) -> ThumbnailResult 
         };
     }
 
-    let img = match read_image_from_file(&path) {
-        Some(i) => i,
-        None => {
-            return ThumbnailResult {
-                thumbnail_base64: None,
-                cache_path: None,
-                width: None,
-                height: None,
-                file_size: Some(file_size),
-                from_cache: false,
+    // Vector formats (.ai / .eps) cannot be decoded by the `image` crate —
+    // rasterize them through the Ghostscript-backed vector service instead.
+    let img = if vector::is_vector_file(&path) {
+        match vector::rasterize_vector(file_path, target_size) {
+            Some(i) => i,
+            None => {
+                return ThumbnailResult {
+                    thumbnail_base64: None,
+                    cache_path: None,
+                    width: None,
+                    height: None,
+                    file_size: Some(file_size),
+                    from_cache: false,
+                }
+            }
+        }
+    } else {
+        match read_image_from_file(&path) {
+            Some(i) => i,
+            None => {
+                return ThumbnailResult {
+                    thumbnail_base64: None,
+                    cache_path: None,
+                    width: None,
+                    height: None,
+                    file_size: Some(file_size),
+                    from_cache: false,
+                }
             }
         }
     };
@@ -314,15 +333,32 @@ pub fn generate_preview(file_path: &str, target_size: u32) -> PreviewResult {
         };
     }
 
-    let img = match read_image_from_file(&path) {
-        Some(i) => i,
-        None => {
-            return PreviewResult {
-                preview_base64: None,
-                cache_path: None,
-                width: None,
-                height: None,
-                from_cache: false,
+    // Vector formats (.ai / .eps) cannot be decoded by the `image` crate —
+    // rasterize them through the Ghostscript-backed vector service instead.
+    let img = if vector::is_vector_file(&path) {
+        match vector::rasterize_vector(file_path, target_size) {
+            Some(i) => i,
+            None => {
+                return PreviewResult {
+                    preview_base64: None,
+                    cache_path: None,
+                    width: None,
+                    height: None,
+                    from_cache: false,
+                }
+            }
+        }
+    } else {
+        match read_image_from_file(&path) {
+            Some(i) => i,
+            None => {
+                return PreviewResult {
+                    preview_base64: None,
+                    cache_path: None,
+                    width: None,
+                    height: None,
+                    from_cache: false,
+                }
             }
         }
     };

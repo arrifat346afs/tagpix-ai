@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { fileFromPath } from '../utils';
+import { isVectorFilename } from '@/app/lib/thumbnail/vectorSupport';
 
 interface UseDragAndDropOptions {
   onFilesAdded: (files: File[]) => void;
@@ -17,8 +18,11 @@ const isValidMediaFile = (file: File): boolean => {
   const isVideo = file.type.startsWith("video/");
   const isUnknownType = file.type === 'application/octet-stream';
   const hasVideoExtension = !!file.name.toLowerCase().match(/\.(mp4|mov|webm|avi|mkv|flv|wmv|m4v|3gp|ogv|mts|m2ts)$/);
-  console.log(`   Checking ${file.name}: type=${file.type}, isImage=${isImage}, isVideo=${isVideo}, isUnknownType=${isUnknownType}, hasVideoExtension=${hasVideoExtension}`);
-  return isImage || isVideo || (isUnknownType && hasVideoExtension);
+  // Vector formats (.ai/.eps) are accepted by extension — the OS may report an
+  // arbitrary MIME type (or none) for them, but they are rasterized backend-side.
+  const hasVectorExtension = isVectorFilename(file.name);
+  console.log(`   Checking ${file.name}: type=${file.type}, isImage=${isImage}, isVideo=${isVideo}, isUnknownType=${isUnknownType}, hasVideoExtension=${hasVideoExtension}, hasVectorExtension=${hasVectorExtension}`);
+  return isImage || isVideo || (isUnknownType && hasVideoExtension) || hasVectorExtension;
 };
 
 export const useDragAndDrop = ({ onFilesAdded, onFileAdded, onFilePathStored, onExifDataFound, activeTab }: UseDragAndDropOptions) => {
