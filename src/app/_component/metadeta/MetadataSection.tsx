@@ -3,7 +3,10 @@ import { DescriptionField } from "./metadata-fields/DescriptionField";
 import KeywordsField from "./metadata-fields/KeywordsField";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { useSettings } from '@/app/contexts/SettingsContext';
+import { useFileStore, getFilePath } from '@/store/fileStore';
+import { useConfigStore } from '@/store/configStore';
+import { useTemplateStore } from '@/store/templateStore';
+import { updateFileMetadata, getMetadata, getCustomInstruction } from '@/store/metadataStore';
 import { generateMetadata } from '@/app/lib/ai';
 import { embedMetadata } from '@/app/lib/tauri/tauri-commands';
 import { useState } from "react";
@@ -12,14 +15,22 @@ import { toast } from "sonner";
 import { CategorySection } from "../category/CategorySection";
 
 export const MetadataSection = () => {
-  const { selectedFile, thumbnails, api, metadataLimits, metadataOptions, generated, getFilePath, templateSettings } = useSettings();
+  // State (reactive zustand selectors)
+  const selectedFile = useFileStore((state) => state.selectedFile);
+  const thumbnails = useFileStore((state) => state.thumbnails);
+  const api = useConfigStore((state) => state.api);
+  const metadataLimits = useConfigStore((state) => state.metadataLimits);
+  const metadataOptions = useConfigStore((state) => state.metadataOptions);
+  const activeTemplateId = useTemplateStore((state) => state.activeTemplateId);
+  const userTemplates = useTemplateStore((state) => state.userTemplates);
+  const editedDefaultTemplates = useTemplateStore((state) => state.editedDefaultTemplates);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleGenerate = async () => {
     if (!selectedFile) return;
 
-    const thumbnailItem = thumbnails.items.find(t => t.file === selectedFile);
+    const thumbnailItem = thumbnails.find(t => t.file === selectedFile);
     if (!thumbnailItem) {
       alert("Thumbnail not ready yet. Please wait.");
       return;
@@ -42,18 +53,18 @@ export const MetadataSection = () => {
     }
 
     // Get custom instruction for this file
-    const customInstruction = generated.getCustomInstruction(selectedFile);
+    const customInstruction = getCustomInstruction(selectedFile);
 
     // Get active custom template if one is selected
     let customTemplate: string | undefined;
-    if (templateSettings.activeTemplateId) {
+    if (activeTemplateId) {
       // Check user templates first
-      const userTemplate = templateSettings.userTemplates.find(t => t.id === templateSettings.activeTemplateId);
+      const userTemplate = userTemplates.find(t => t.id === activeTemplateId);
       if (userTemplate) {
         customTemplate = userTemplate.template;
       } else {
         // Check edited default templates
-        const editedDefault = templateSettings.editedDefaultTemplates?.find(t => t.id === templateSettings.activeTemplateId);
+        const editedDefault = editedDefaultTemplates?.find(t => t.id === activeTemplateId);
         if (editedDefault) {
           customTemplate = editedDefault.template;
         }
@@ -88,7 +99,7 @@ export const MetadataSection = () => {
         },
       });
 
-      generated.setMetadata(selectedFile, {
+      updateFileMetadata(selectedFile, {
         title: result.title,
         description: result.description,
         keywords: result.keywords,
@@ -113,7 +124,7 @@ export const MetadataSection = () => {
       return;
     }
 
-    const metadata = generated.getMetadata(selectedFile);
+    const metadata = getMetadata(selectedFile);
     if (!metadata) {
       toast.error("No metadata to save");
       return;

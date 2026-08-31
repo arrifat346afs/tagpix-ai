@@ -9,7 +9,7 @@ export type GenerationProgress = {
     cancelRequested: boolean;
 };
 
-interface UiData {
+interface UiState {
     settingsDialog: {
         isOpen: boolean;
         defaultTab: string;
@@ -19,15 +19,7 @@ interface UiData {
     activeLeftTab: 'category' | 'log';
 }
 
-interface UiStore extends UiData {
-    setSettingsDialogOpen: (open: boolean) => void;
-    setSettingsDialogTab: (tab: string) => void;
-    setGenerationProgress: (progress: Partial<GenerationProgress>) => void;
-    setHasAttemptedGeneration: (attempted: boolean) => void;
-    setActiveLeftTab: (tab: 'category' | 'log') => void;
-}
-
-const initialState: UiData = {
+const initialState: UiState = {
     settingsDialog: {
         isOpen: false,
         defaultTab: 'models',
@@ -43,43 +35,43 @@ const initialState: UiData = {
     activeLeftTab: 'category',
 };
 
-/** Transient UI state (was `uiSlice` in Redux) — not persisted. */
-export const useUiStore = create<UiStore>()(
-    immer((set) => ({
-        ...initialState,
+/**
+ * Transient UI state (was `uiSlice` in Redux) — not persisted.
+ * The store holds STATE ONLY — every action is an explicit standalone
+ * function below that updates the store via setState.
+ */
+export const useUiStore = create<UiState>()(immer(() => initialState));
 
-        setSettingsDialogOpen: (open) =>
-            set((state) => {
-                state.settingsDialog.isOpen = open;
-            }),
+// ===================== Actions =====================
+// Each action is a standalone function that explicitly updates the store,
+// so components can import them directly (stable references, no hooks).
 
-        setSettingsDialogTab: (tab) =>
-            set((state) => {
-                state.settingsDialog.defaultTab = tab;
-            }),
+export function setSettingsDialogOpen(open: boolean) {
+    useUiStore.setState((state) => {
+        state.settingsDialog.isOpen = open;
+    });
+}
 
-        setGenerationProgress: (progress) =>
-            set((state) => {
-                state.generationProgress = { ...state.generationProgress, ...progress };
-            }),
+export function setSettingsDialogTab(tab: string) {
+    useUiStore.setState((state) => {
+        state.settingsDialog.defaultTab = tab;
+    });
+}
 
-        setHasAttemptedGeneration: (attempted) =>
-            set((state) => {
-                state.hasAttemptedGeneration = attempted;
-            }),
+export function setGenerationProgress(progress: Partial<GenerationProgress>) {
+    useUiStore.setState((state) => {
+        state.generationProgress = { ...state.generationProgress, ...progress };
+    });
+}
 
-        setActiveLeftTab: (tab) =>
-            set((state) => {
-                state.activeLeftTab = tab;
-            }),
-    }))
-);
+export function setHasAttemptedGeneration(attempted: boolean) {
+    useUiStore.setState((state) => {
+        state.hasAttemptedGeneration = attempted;
+    });
+}
 
-// Standalone action exports (stable references). Zustand actions execute
-// immediately when called, which keeps the existing `dispatch(action(payload))`
-// call style in the migration-adapter code working unchanged.
-export const setSettingsDialogOpen = useUiStore.getState().setSettingsDialogOpen;
-export const setSettingsDialogTab = useUiStore.getState().setSettingsDialogTab;
-export const setGenerationProgress = useUiStore.getState().setGenerationProgress;
-export const setHasAttemptedGeneration = useUiStore.getState().setHasAttemptedGeneration;
-export const setActiveLeftTab = useUiStore.getState().setActiveLeftTab;
+export function setActiveLeftTab(tab: 'category' | 'log') {
+    useUiStore.setState((state) => {
+        state.activeLeftTab = tab;
+    });
+}

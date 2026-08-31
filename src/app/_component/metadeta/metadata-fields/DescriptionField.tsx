@@ -1,11 +1,17 @@
 import { Textarea } from "@/components/ui/textarea";
-import { useSettings } from '@/app/contexts/SettingsContext';
+import { useFileStore } from '@/store/fileStore';
+import { useConfigStore } from '@/store/configStore';
+import { useMetadataStore, updateFileMetadata } from '@/store/metadataStore';
 import { memo } from "react";
 
 export const DescriptionField = memo(function DescriptionField() {
-  const { generated, selectedFile, metadataLimits } = useSettings();
+  const selectedFile = useFileStore((state) => state.selectedFile);
+  const metadataLimits = useConfigStore((state) => state.metadataLimits);
+  const generatedMetadata = useMetadataStore((state) => state.generatedMetadata);
 
-  const metadata = selectedFile ? generated.getMetadata(selectedFile) : undefined;
+  const metadata = selectedFile
+    ? generatedMetadata.find((m) => m.file === selectedFile)?.metadata
+    : undefined;
   const description = metadata?.description || '';
 
   const maxLength = metadataLimits.descriptionLimit;
@@ -16,7 +22,7 @@ export const DescriptionField = memo(function DescriptionField() {
     if (selectedFile) {
       const newValue = e.target.value;
       if (newValue.length <= maxLength) {
-        generated.setMetadata(selectedFile, { description: newValue });
+        updateFileMetadata(selectedFile, { description: newValue });
       }
     }
   };

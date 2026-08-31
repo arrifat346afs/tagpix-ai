@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSettings } from '@/app/contexts/SettingsContext';
+import { useConfigStore, setApiKey } from '@/store/configStore';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -39,7 +39,7 @@ interface ApiKeyManagementProps {
 }
 
 const ApiKeyManagement = ({ compact = false, showTitle = true }: ApiKeyManagementProps) => {
-  const { api } = useSettings();
+  const api = useConfigStore((state) => state.api);
   
   // Local state for unsaved changes
   const [localApiKeys, setLocalApiKeys] = useState(api.apiKeys);
@@ -74,7 +74,7 @@ const ApiKeyManagement = ({ compact = false, showTitle = true }: ApiKeyManagemen
     // Save API keys only if changed
     Object.entries(localApiKeys).forEach(([provider, key]) => {
       if (key !== api.apiKeys[provider as Provider]) {
-        api.setApiKey(provider as Provider, key);
+        setApiKey(provider as Provider, key);
       }
     });
 

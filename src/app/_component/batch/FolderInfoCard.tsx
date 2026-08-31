@@ -19,7 +19,7 @@ import {
   Check,
   FileText,
 } from "lucide-react";
-import type { UserTemplate } from "@/app/contexts/SettingsContext";
+import type { UserTemplate } from "@/store/templateStore";
 import type {
   FolderProcessingState,
   ImageProcessingState,

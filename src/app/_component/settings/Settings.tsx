@@ -4,7 +4,7 @@ import MetadataSettings from "./_component/MetadataSettings";
 import { EmbedSettings } from "./_component/EmbedSettings";
 import ApiKeyManagement from "./_component/ApiKeyManagement";
 import ExportSettings from "./_component/ExportSettings";
-import { useSettings } from "@/app/contexts/SettingsContext";
+import { useUiStore, setSettingsDialogTab } from "@/store/uiStore";
 import {
   Settings as SettingsIcon,
   Key,
@@ -22,7 +22,7 @@ import { motion, AnimatePresence } from "motion/react";
 import CacheSettings from "./_component/CacheSettings";
 
 const Settings = () => {
-  const { settingsDialog } = useSettings();
+  const defaultTab = useUiStore((state) => state.settingsDialog.defaultTab);
 
   const menuItems = [
     { id: "themes", label: "Themes", icon: Palette },
@@ -65,11 +65,11 @@ const Settings = () => {
           <nav className="space-y-1">
             {menuItems.map((item) => {
               const Icon = item.icon;
-              const isActive = settingsDialog.defaultTab === item.id;
+              const isActive = defaultTab === item.id;
               return (
                 <motion.button
                   key={item.id}
-                  onClick={() => settingsDialog.setDefaultTab(item.id)}
+                  onClick={() => setSettingsDialogTab(item.id)}
                   className={cn(
                     "w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2.5 rounded-md text-xs sm:text-sm font-medium transition-colors",
                     isActive
@@ -95,14 +95,14 @@ const Settings = () => {
         <div className="flex-1 overflow-hidden px-4 sm:px-6 py-4 min-w-0 relative">
           <AnimatePresence mode="wait">
             <motion.div
-              key={settingsDialog.defaultTab}
+              key={defaultTab}
               className="h-full overflow-y-auto"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.18, ease: "easeInOut" }}
             >
-              {tabContent[settingsDialog.defaultTab]}
+              {tabContent[defaultTab]}
             </motion.div>
           </AnimatePresence>
         </div>

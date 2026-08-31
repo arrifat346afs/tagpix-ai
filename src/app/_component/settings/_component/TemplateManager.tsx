@@ -4,12 +4,25 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useSettings } from '@/app/contexts/SettingsContext';
+import { useConfigStore } from '@/store/configStore';
+import {
+  useTemplateStore,
+  addUserTemplate,
+  updateUserTemplate,
+  deleteUserTemplate,
+  editDefaultTemplate,
+  resetDefaultTemplate,
+  resetAllDefaultTemplates,
+  setActiveTemplate,
+} from '@/store/templateStore';
 import { DEFAULT_TEMPLATES, validateTemplate, interpolateTemplate } from '@/app/lib/metadata/templateUtils';
 import { Trash2, Edit, Eye, Plus, Check, RotateCcw } from 'lucide-react';
 
 export const TemplateManager = () => {
-  const { templateSettings, metadataLimits } = useSettings();
+  const metadataLimits = useConfigStore((state) => state.metadataLimits);
+  const activeTemplateId = useTemplateStore((state) => state.activeTemplateId);
+  const userTemplates = useTemplateStore((state) => state.userTemplates);
+  const editedDefaultTemplates = useTemplateStore((state) => state.editedDefaultTemplates);
   const [editingTemplate, setEditingTemplate] = useState<string | null>(null);
   const [isEditingDefault, setIsEditingDefault] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState('');
@@ -28,7 +41,7 @@ export const TemplateManager = () => {
       return;
     }
 
-    templateSettings.addUserTemplate({
+    addUserTemplate({
       name: newTemplateName.trim(),
       template: newTemplateContent.trim(),
     });
@@ -45,7 +58,7 @@ export const TemplateManager = () => {
       return;
     }
 
-    templateSettings.updateUserTemplate(id, {
+    updateUserTemplate(id, {
       name: newTemplateName.trim(),
       template: newTemplateContent.trim(),
     });
@@ -57,7 +70,7 @@ export const TemplateManager = () => {
 
   const handleDeleteTemplate = (id: string) => {
     if (confirm('Are you sure you want to delete this template?')) {
-      templateSettings.deleteUserTemplate(id);
+      deleteUserTemplate(id);
     }
   };
 
@@ -68,7 +81,7 @@ export const TemplateManager = () => {
       return;
     }
 
-    templateSettings.editDefaultTemplate(id, newTemplateContent.trim());
+    editDefaultTemplate(id, newTemplateContent.trim());
 
     setNewTemplateName('');
     setNewTemplateContent('');
@@ -78,13 +91,13 @@ export const TemplateManager = () => {
 
   const handleResetDefaultTemplate = (id: string) => {
     if (confirm('Are you sure you want to reset this default template to its original content?')) {
-      templateSettings.resetDefaultTemplate(id);
+      resetDefaultTemplate(id);
     }
   };
 
   const handleResetAllDefaults = () => {
     if (confirm('Are you sure you want to reset ALL default templates to their original content?')) {
-      templateSettings.resetAllDefaultTemplates();
+      resetAllDefaultTemplates();
     }
   };
 
@@ -119,7 +132,7 @@ export const TemplateManager = () => {
 
   const allTemplates = [
     ...DEFAULT_TEMPLATES.map(t => {
-      const edited = templateSettings.editedDefaultTemplates?.find(e => e.id === t.id);
+      const edited = editedDefaultTemplates?.find(e => e.id === t.id);
       return {
         ...t,
         isPreset: true,
@@ -127,7 +140,7 @@ export const TemplateManager = () => {
         isEdited: !!edited,
       };
     }),
-    ...templateSettings.userTemplates.map(t => ({ ...t, isPreset: false, isEdited: false })),
+    ...userTemplates.map(t => ({ ...t, isPreset: false, isEdited: false })),
   ];
 
   return (
@@ -151,7 +164,7 @@ export const TemplateManager = () => {
           <div className="flex justify-between items-center">
             <h4 className="text-base font-medium">Available Templates</h4>
             <div className="flex gap-2">
-              {(templateSettings.editedDefaultTemplates?.length || 0) > 0 && (
+              {(editedDefaultTemplates?.length || 0) > 0 && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -165,7 +178,7 @@ export const TemplateManager = () => {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => templateSettings.setActiveTemplate(null)}
+                onClick={() => setActiveTemplate(null)}
               >
                 Use Default
               </Button>
@@ -181,7 +194,7 @@ export const TemplateManager = () => {
               <div
                 key={template.id}
                 className={`border rounded-lg p-4 transition-colors ${
-                  templateSettings.activeTemplateId === template.id
+                  activeTemplateId === template.id
                     ? 'border-primary bg-primary/10 dark:bg-primary/20'
                     : 'border-border bg-card'
                 }`}
@@ -196,7 +209,7 @@ export const TemplateManager = () => {
                       {template.isEdited && (
                         <Badge variant="outline" className="text-xs text-amber-600 border-amber-600">Edited</Badge>
                       )}
-                      {templateSettings.activeTemplateId === template.id && (
+                      {activeTemplateId === template.id && (
                         <Badge variant="default" className="text-xs">Active</Badge>
                       )}
                     </div>
@@ -255,11 +268,11 @@ export const TemplateManager = () => {
                       </>
                     )}
                     <Button
-                      variant={templateSettings.activeTemplateId === template.id ? "default" : "outline"}
+                      variant={activeTemplateId === template.id ? "default" : "outline"}
                       size="sm"
-                      onClick={() => templateSettings.setActiveTemplate(template.id)}
+                      onClick={() => setActiveTemplate(template.id)}
                     >
-                      {templateSettings.activeTemplateId === template.id ? (
+                      {activeTemplateId === template.id ? (
                         <Check className="h-4 w-4" />
                       ) : (
                         'Use'

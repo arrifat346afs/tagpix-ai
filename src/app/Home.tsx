@@ -4,13 +4,19 @@ import FileSection from "./_component/file-preview/FileSection";
 import { MetadataSection } from "./_component/metadeta/MetadataSection";
 import { ProgressSection } from "./_component/progressbar/ProgressSection";
 import ThumbnailSection from "./_component/thumbnail/ThumbnailSection";
-import { useSettings } from "./contexts/SettingsContext";
+import { useFileStore, setFiles, setSelectedFile } from "@/store/fileStore";
+import { useThumbnailAutoGeneration } from "./hooks/useThumbnailAutoGeneration";
 import { Separator } from "@/components/ui/separator";
 
 // import LeftTabs from "./_component/TabGroup/LeftTabs";
 const PROGRESS_BAR_HEIGHT = 56; // px
 export const Home = () => {
-  const { selectedFile, setSelectedFile, setFiles } = useSettings();
+  const selectedFile = useFileStore((state) => state.selectedFile);
+
+  // Auto-generates thumbnails for newly added files
+  // (was a side effect inside the removed SettingsProvider)
+  useThumbnailAutoGeneration();
+
   const handleFilesSelected = (files: File[]) => {
     setFiles(files);
   };

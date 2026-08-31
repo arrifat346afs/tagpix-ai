@@ -6,7 +6,6 @@ export type CategorySelection = {
     shutterStock1: string;
     shutterStock2: string;
 };
-
 export type GeneratedMetadata = {
     title: string;
     description: string;
@@ -20,21 +19,12 @@ export type FileMetadata = {
     customInstruction?: string;
 };
 
-interface MetadataData {
+interface MetadataState {
     generatedMetadata: FileMetadata[];
     defaultCategories: CategorySelection;
 }
 
-interface MetadataStore extends MetadataData {
-    setGeneratedMetadata: (metadata: FileMetadata[]) => void;
-    updateFileMetadata: (payload: { file: File; metadata: Partial<GeneratedMetadata> }) => void;
-    updateFileCategories: (payload: { file: File; categories: Partial<CategorySelection> }) => void;
-    updateCustomInstruction: (payload: { file: File; instruction: string }) => void;
-    setDefaultCategories: (categories: Partial<CategorySelection>) => void;
-    clearGeneratedMetadata: () => void;
-}
-
-const initialState: MetadataData = {
+const initialState: MetadataState = {
     generatedMetadata: [],
     defaultCategories: {
         adobeStock: '',
@@ -43,87 +33,104 @@ const initialState: MetadataData = {
     },
 };
 
-/** AI-generated metadata per file (was `metadataSlice` in Redux) — not persisted. */
-export const useMetadataStore = create<MetadataStore>()(
-    immer((set) => ({
-        ...initialState,
+/**
+ * AI-generated metadata per file (was `metadataSlice` in Redux) — not persisted.
+ * The store holds STATE ONLY — every action is an explicit standalone
+ * function below that updates the store via setState.
+ */
+export const useMetadataStore = create<MetadataState>()(immer(() => initialState));
 
-        setGeneratedMetadata: (metadata) =>
-            set((state) => {
-                state.generatedMetadata = metadata;
-            }),
+// ===================== Actions =====================
+// Each action is a standalone function that explicitly updates the store,
+// so components can import them directly (stable references, no hooks).
 
-        updateFileMetadata: (payload) =>
-            set((state) => {
-                const index = state.generatedMetadata.findIndex((m) => m.file === payload.file);
-                if (index !== -1) {
-                    state.generatedMetadata[index].metadata = {
-                        ...state.generatedMetadata[index].metadata,
-                        ...payload.metadata,
-                    };
-                } else {
-                    // File not found, add it
-                    state.generatedMetadata.push({
-                        file: payload.file,
-                        metadata: {
-                            title: payload.metadata.title || '',
-                            description: payload.metadata.description || '',
-                            keywords: payload.metadata.keywords || '',
-                        },
-                        categories: { ...state.defaultCategories },
-                    });
-                }
-            }),
+export function setGeneratedMetadata(metadata: FileMetadata[]) {
+    useMetadataStore.setState((state) => {
+        state.generatedMetadata = metadata;
+    });
+}
 
-        updateFileCategories: (payload) =>
-            set((state) => {
-                const index = state.generatedMetadata.findIndex((m) => m.file === payload.file);
-                if (index !== -1) {
-                    state.generatedMetadata[index].categories = {
-                        ...(state.generatedMetadata[index].categories || state.defaultCategories),
-                        ...payload.categories,
-                    };
-                } else {
-                    state.generatedMetadata.push({
-                        file: payload.file,
-                        metadata: { title: '', description: '', keywords: '' },
-                        categories: { ...state.defaultCategories, ...payload.categories },
-                    });
-                }
-            }),
+export function updateFileMetadata(file: File, metadata: Partial<GeneratedMetadata>) {
+    useMetadataStore.setState((state) => {
+        const index = state.generatedMetadata.findIndex((m) => m.file === file);
+        if (index !== -1) {
+            state.generatedMetadata[index].metadata = {
+                ...state.generatedMetadata[index].metadata,
+                ...metadata,
+            };
+        } else {
+            // File not found, add it
+            state.generatedMetadata.push({
+                file,
+                metadata: {
+                    title: metadata.title || '',
+                    description: metadata.description || '',
+                    keywords: metadata.keywords || '',
+                },
+                categories: { ...state.defaultCategories },
+            });
+        }
+    });
+}
 
-        updateCustomInstruction: (payload) =>
-            set((state) => {
-                const index = state.generatedMetadata.findIndex((m) => m.file === payload.file);
-                if (index !== -1) {
-                    state.generatedMetadata[index].customInstruction = payload.instruction;
-                } else {
-                    state.generatedMetadata.push({
-                        file: payload.file,
-                        metadata: { title: '', description: '', keywords: '' },
-                        customInstruction: payload.instruction,
-                    });
-                }
-            }),
+export function updateFileCategories(file: File, categories: Partial<CategorySelection>) {
+    useMetadataStore.setState((state) => {
+        const index = state.generatedMetadata.findIndex((m) => m.file === file);
+        if (index !== -1) {
+            state.generatedMetadata[index].categories = {
+                ...(state.generatedMetadata[index].categories || state.defaultCategories),
+                ...categories,
+            };
+        } else {
+            state.generatedMetadata.push({
+                file,
+                metadata: { title: '', description: '', keywords: '' },
+                categories: { ...state.defaultCategories, ...categories },
+            });
+        }
+    });
+}
 
-        setDefaultCategories: (categories) =>
-            set((state) => {
-                state.defaultCategories = { ...state.defaultCategories, ...categories };
-            }),
+export function updateCustomInstruction(file: File, instruction: string) {
+    useMetadataStore.setState((state) => {
+        const index = state.generatedMetadata.findIndex((m) => m.file === file);
+        if (index !== -1) {
+            state.generatedMetadata[index].customInstruction = instruction;
+        } else {
+            state.generatedMetadata.push({
+                file,
+                metadata: { title: '', description: '', keywords: '' },
+                customInstruction: instruction,
+            });
+        }
+    });
+}
 
-        clearGeneratedMetadata: () =>
-            set((state) => {
-                state.generatedMetadata = [];
-            }),
-    }))
-);
+export function setDefaultCategories(categories: Partial<CategorySelection>) {
+    useMetadataStore.setState((state) => {
+        state.defaultCategories = { ...state.defaultCategories, ...categories };
+    });
+}
 
-// Standalone action exports (stable references). Zustand actions execute
-// immediately when called, which keeps the existing `dispatch(action(payload))`
-// call style in the migration-adapter code working unchanged.
-export const setGeneratedMetadata = useMetadataStore.getState().setGeneratedMetadata;
-export const updateFileMetadata = useMetadataStore.getState().updateFileMetadata;
-export const updateFileCategories = useMetadataStore.getState().updateFileCategories;
-export const updateCustomInstruction = useMetadataStore.getState().updateCustomInstruction;
-export const setDefaultCategories = useMetadataStore.getState().setDefaultCategories;
-export const clearGeneratedMetadata = useMetadataStore.getState().clearGeneratedMetadata;
+export function clearGeneratedMetadata() {
+    useMetadataStore.setState((state) => {
+        state.generatedMetadata = [];
+    });
+}
+
+// ===================== Non-reactive helpers =====================
+
+/** Get the generated metadata for a file without subscribing to the store. */
+export function getMetadata(file: File): GeneratedMetadata | undefined {
+    return useMetadataStore.getState().generatedMetadata.find((m) => m.file === file)?.metadata;
+}
+
+/** Get the category selection for a file without subscribing to the store. */
+export function getCategories(file: File): CategorySelection | undefined {
+    return useMetadataStore.getState().generatedMetadata.find((m) => m.file === file)?.categories;
+}
+
+/** Get the custom instruction for a file without subscribing to the store. */
+export function getCustomInstruction(file: File): string | undefined {
+    return useMetadataStore.getState().generatedMetadata.find((m) => m.file === file)?.customInstruction;
+}

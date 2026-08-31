@@ -2,15 +2,19 @@ import { useState, memo } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { X } from "lucide-react";
-import { useSettings } from "@/app/contexts/SettingsContext";
+import { useFileStore } from "@/store/fileStore";
+import { useConfigStore } from "@/store/configStore";
+import { useMetadataStore, updateFileMetadata } from "@/store/metadataStore";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 const KeywordsField = memo(function KeywordsField() {
-  const { generated, selectedFile, metadataLimits } = useSettings();
+  const selectedFile = useFileStore((state) => state.selectedFile);
+  const metadataLimits = useConfigStore((state) => state.metadataLimits);
+  const generatedMetadata = useMetadataStore((state) => state.generatedMetadata);
   const [inputValue, setInputValue] = useState("");
 
   const metadata = selectedFile
-    ? generated.getMetadata(selectedFile)
+    ? generatedMetadata.find((m) => m.file === selectedFile)?.metadata
     : undefined;
   const keywords = metadata?.keywords || "";
   const keywordArray = keywords
@@ -39,7 +43,7 @@ const KeywordsField = memo(function KeywordsField() {
       }
 
       const updatedKeywords = [...keywordArray, newKeyword].join(", ");
-      generated.setMetadata(selectedFile, { keywords: updatedKeywords });
+      updateFileMetadata(selectedFile, { keywords: updatedKeywords });
       setInputValue("");
     }
   };
@@ -50,7 +54,7 @@ const KeywordsField = memo(function KeywordsField() {
     const updatedKeywords = keywordArray
       .filter((k) => k !== keywordToRemove)
       .join(", ");
-    generated.setMetadata(selectedFile, { keywords: updatedKeywords });
+    updateFileMetadata(selectedFile, { keywords: updatedKeywords });
   };
 
   return (

@@ -1,16 +1,16 @@
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { useSettings } from '@/app/contexts/SettingsContext';
+import { useConfigStore, setEmbedSettings } from '@/store/configStore';
 
 export const EmbedSettings = () => {
-  const { embedSettings } = useSettings();
+  const embedSettings = useConfigStore((state) => state.embedSettings);
 
   const handleEnabledChange = (enabled: boolean) => {
-    embedSettings.setEmbedSettings({ enabled });
+    setEmbedSettings({ enabled });
   };
 
   const handleFieldChange = (field: 'title' | 'description' | 'keywords', value: boolean) => {
-    embedSettings.setEmbedSettings({
+    setEmbedSettings({
       fields: {
         ...embedSettings.fields,
         [field]: value,

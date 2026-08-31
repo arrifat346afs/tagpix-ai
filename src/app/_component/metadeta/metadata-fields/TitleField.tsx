@@ -1,13 +1,19 @@
 import { Textarea } from "@/components/ui/textarea";
-import { useSettings } from '@/app/contexts/SettingsContext';
+import { useFileStore } from '@/store/fileStore';
+import { useConfigStore } from '@/store/configStore';
+import { useMetadataStore, updateFileMetadata } from '@/store/metadataStore';
 import { extractKeywordsFromTitle } from "@/app/lib/metadata/keywordUtils";
 import { memo } from "react";
 
 
 function TitleField() {
-  const { generated, selectedFile, metadataLimits } = useSettings();
+  const selectedFile = useFileStore((state) => state.selectedFile);
+  const metadataLimits = useConfigStore((state) => state.metadataLimits);
+  const generatedMetadata = useMetadataStore((state) => state.generatedMetadata);
 
-  const metadata = selectedFile ? generated.getMetadata(selectedFile) : undefined;
+  const metadata = selectedFile
+    ? generatedMetadata.find((m) => m.file === selectedFile)?.metadata
+    : undefined;
   const title = metadata?.title || '';
 
   const maxLength = metadataLimits.titleLimit;
@@ -32,7 +38,7 @@ function TitleField() {
       // Apply limit if needed (optional, but good practice)
       const limitedKeywords = mergedKeywords.slice(0, metadataLimits.keywordLimit);
 
-      generated.setMetadata(selectedFile, {
+      updateFileMetadata(selectedFile, {
         title: newTitle,
         keywords: limitedKeywords.join(', ')
       });

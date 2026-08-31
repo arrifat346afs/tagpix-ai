@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { useSettings } from "@/app/contexts/SettingsContext";
+import { getCustomInstruction, updateCustomInstruction } from "@/store/metadataStore";
 
 type CustomInstructionDialogProps = {
   file: File | null;
@@ -22,27 +22,26 @@ export const CustomInstructionDialog = ({
   isOpen,
   onClose,
 }: CustomInstructionDialogProps) => {
-  const { generated } = useSettings();
   const [instruction, setInstruction] = useState("");
 
   // Load existing instruction when dialog opens
   useEffect(() => {
     if (file && isOpen) {
-      const existingInstruction = generated.getCustomInstruction(file);
+      const existingInstruction = getCustomInstruction(file);
       setInstruction(existingInstruction || "");
     }
-  }, [file, isOpen, generated]);
+  }, [file, isOpen]);
 
   const handleSave = () => {
     if (file) {
-      generated.setCustomInstruction(file, instruction);
+      updateCustomInstruction(file, instruction);
       onClose();
     }
   };
 
   const handleClear = () => {
     if (file) {
-      generated.setCustomInstruction(file, "");
+      updateCustomInstruction(file, "");
       setInstruction("");
     }
   };

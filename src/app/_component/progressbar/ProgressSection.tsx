@@ -1,15 +1,17 @@
 import { Progress } from "@/components/ui/progress"
-import { useSettings } from "@/app/contexts/SettingsContext"
+import { useFileStore } from "@/store/fileStore";
+import { useMetadataStore } from "@/store/metadataStore";
 
 
 export const ProgressSection = () => {
-  const { thumbnails, generated } = useSettings();
+  const thumbnails = useFileStore((state) => state.thumbnails);
+  const generatedMetadata = useMetadataStore((state) => state.generatedMetadata);
 
   // Calculate how many files have metadata generated
-  const totalFiles = thumbnails.items.length;
+  const totalFiles = thumbnails.length;
 
   // Only count files that have actual metadata content (not just custom instructions)
-  const completedFiles = generated.items.filter(item => {
+  const completedFiles = generatedMetadata.filter(item => {
     const hasContent = item.metadata.title || item.metadata.description || item.metadata.keywords;
     return hasContent;
   }).length;

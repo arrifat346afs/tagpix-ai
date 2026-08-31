@@ -1,17 +1,17 @@
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useSettings } from "@/app/contexts/SettingsContext";
+import { useConfigStore, setExportSettings } from "@/store/configStore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { open } from '@tauri-apps/plugin-dialog';
 const ExportSettings = () => {
-  const { exportSettings } = useSettings();
+  const exportSettings = useConfigStore((state) => state.exportSettings);
   const [selectedDirectory, setSelectedDirectory] = useState<string | undefined>(undefined);
 
   const handleExportToggle = (format: keyof typeof exportSettings, checked: boolean) => {
-    exportSettings.setExportSettings({ [format]: checked });
+    setExportSettings({ [format]: checked });
   };
   // Load saved export path on mount
   useEffect(() => {

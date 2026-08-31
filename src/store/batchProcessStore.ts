@@ -48,34 +48,6 @@ export type BatchProcessState = {
   currentStage: 'ai_generation' | 'metadata_embedding' | 'exporting' | null;
 };
 
-interface BatchProcessStore extends BatchProcessState {
-  startBatchProcess: (payload: { folders: FolderInfo[]; processingMode: 'sequential' | 'parallel' }) => void;
-  updateFolderStatus: (payload: {
-    folderId: string;
-    status: FolderProcessingState['status'];
-    error?: string;
-  }) => void;
-  updateImageStatus: (payload: {
-    folderId: string;
-    fileName: string;
-    status: ImageProcessingState['status'];
-    metadata?: GeneratedMetadata;
-    error?: string;
-  }) => void;
-  setCurrentStage: (stage: BatchProcessState['currentStage']) => void;
-  setCurrentFolderIndex: (index: number) => void;
-  updateImageProgress: (payload: { folderId: string; currentImageIndex: number }) => void;
-  markFolderExported: (payload: { folderId: string; exportedFilePath: string }) => void;
-  completeBatchProcess: () => void;
-  pauseBatchProcess: () => void;
-  resumeBatchProcess: () => void;
-  restoreBatchProcess: (saved: BatchProcessState) => void;
-  failBatchProcess: (error: string) => void;
-  cancelBatchProcess: () => void;
-  resetBatchProcess: () => void;
-  updateFilePath: (payload: { folderId: string; fileName: string; filePath: string }) => void;
-}
-
 const initialState: BatchProcessState = {
   isProcessing: false,
   overallStatus: 'idle',
@@ -89,210 +61,215 @@ const initialState: BatchProcessState = {
   currentStage: null,
 };
 
-/** Live batch-processing progress (was `batchProcessSlice` in Redux) — not persisted. */
-export const useBatchProcessStore = create<BatchProcessStore>()(
-  immer((set) => ({
-    ...initialState,
+/**
+ * Live batch-processing progress (was `batchProcessSlice` in Redux) — not persisted.
+ * The store holds STATE ONLY — every action is an explicit standalone
+ * function below that updates the store via setState.
+ */
+export const useBatchProcessStore = create<BatchProcessState>()(immer(() => initialState));
 
-    startBatchProcess: (payload) =>
-      set((state) => {
-        const { folders, processingMode } = payload;
+// ===================== Actions =====================
+// Each action is a standalone function that explicitly updates the store,
+// so components can import them directly (stable references, no hooks).
 
-        state.isProcessing = true;
-        state.overallStatus = 'scanning';
-        state.processingMode = processingMode;
-        state.currentFolderIndex = 0;
-        state.totalFolders = folders.length;
-        state.totalImages = folders.reduce((acc, f) => acc + f.imageCount, 0);
-        state.completedImages = 0;
-        state.failedImages = 0;
-        state.startTime = Date.now();
-        state.error = undefined;
-        state.currentStage = null;
+export function startBatchProcess(folders: FolderInfo[], processingMode: 'sequential' | 'parallel') {
+  useBatchProcessStore.setState((state) => {
+    state.isProcessing = true;
+    state.overallStatus = 'scanning';
+    state.processingMode = processingMode;
+    state.currentFolderIndex = 0;
+    state.totalFolders = folders.length;
+    state.totalImages = folders.reduce((acc, f) => acc + f.imageCount, 0);
+    state.completedImages = 0;
+    state.failedImages = 0;
+    state.startTime = Date.now();
+    state.error = undefined;
+    state.currentStage = null;
 
-        state.folders = folders.map((folder, index) => ({
-          folderId: folder.id,
-          folderPath: folder.folderPath,
-          folderName: folder.folderPath.split(/[/\\]/).pop() || 'Unknown',
-          status: index === 0 ? 'processing' : 'pending',
-          images: folder.files
-            .filter((f) => f.type.startsWith('image/'))
-            .map((file) => ({
-              fileName: file.name,
-              filePath: '', // Will be populated when processing
-              status: 'pending',
-            })),
-          currentImageIndex: 0,
-          assignedTemplateId: folder.assignedTemplateId,
-        }));
-      }),
+    state.folders = folders.map((folder, index) => ({
+      folderId: folder.id,
+      folderPath: folder.folderPath,
+      folderName: folder.folderPath.split(/[/\\]/).pop() || 'Unknown',
+      status: index === 0 ? 'processing' : 'pending',
+      images: folder.files
+        .filter((f) => f.type.startsWith('image/'))
+        .map((file) => ({
+          fileName: file.name,
+          filePath: '', // Will be populated when processing
+          status: 'pending' as const,
+        })),
+      currentImageIndex: 0,
+      assignedTemplateId: folder.assignedTemplateId,
+    }));
+  });
+}
 
-    updateFolderStatus: (payload) =>
-      set((state) => {
-        const folder = state.folders.find((f) => f.folderId === payload.folderId);
-        if (folder) {
-          folder.status = payload.status;
-          if (payload.error) {
-            folder.error = payload.error;
-          }
+export function updateFolderStatus(
+  folderId: string,
+  status: FolderProcessingState['status'],
+  error?: string
+) {
+  useBatchProcessStore.setState((state) => {
+    const folder = state.folders.find((f) => f.folderId === folderId);
+    if (folder) {
+      folder.status = status;
+      if (error) {
+        folder.error = error;
+      }
+    }
+  });
+}
+
+export function updateImageStatus(
+  folderId: string,
+  fileName: string,
+  status: ImageProcessingState['status'],
+  metadata?: GeneratedMetadata,
+  error?: string
+) {
+  useBatchProcessStore.setState((state) => {
+    const folder = state.folders.find((f) => f.folderId === folderId);
+    if (folder) {
+      const image = folder.images.find((img) => img.fileName === fileName);
+      if (image) {
+        image.status = status;
+        if (metadata) {
+          image.metadata = metadata;
         }
-      }),
-
-    updateImageStatus: (payload) =>
-      set((state) => {
-        const folder = state.folders.find((f) => f.folderId === payload.folderId);
-        if (folder) {
-          const image = folder.images.find((img) => img.fileName === payload.fileName);
-          if (image) {
-            image.status = payload.status;
-            if (payload.metadata) {
-              image.metadata = payload.metadata;
-            }
-            if (payload.error) {
-              image.error = payload.error;
-            }
-          }
+        if (error) {
+          image.error = error;
         }
+      }
+    }
 
-        // Update counters
-        if (payload.status === 'completed') {
-          state.completedImages++;
-        } else if (payload.status === 'error') {
-          state.failedImages++;
-        }
-      }),
+    // Update counters
+    if (status === 'completed') {
+      state.completedImages++;
+    } else if (status === 'error') {
+      state.failedImages++;
+    }
+  });
+}
 
-    setCurrentStage: (stage) =>
-      set((state) => {
-        state.currentStage = stage;
-        if (stage === 'ai_generation') {
-          state.overallStatus = 'processing';
-        } else if (stage === 'metadata_embedding') {
-          state.overallStatus = 'embedding';
-        } else if (stage === 'exporting') {
-          state.overallStatus = 'exporting';
-        }
-      }),
+export function setCurrentStage(stage: BatchProcessState['currentStage']) {
+  useBatchProcessStore.setState((state) => {
+    state.currentStage = stage;
+    if (stage === 'ai_generation') {
+      state.overallStatus = 'processing';
+    } else if (stage === 'metadata_embedding') {
+      state.overallStatus = 'embedding';
+    } else if (stage === 'exporting') {
+      state.overallStatus = 'exporting';
+    }
+  });
+}
 
-    setCurrentFolderIndex: (index) =>
-      set((state) => {
-        state.currentFolderIndex = index;
+export function setCurrentFolderIndex(index: number) {
+  useBatchProcessStore.setState((state) => {
+    state.currentFolderIndex = index;
 
-        // Update folder statuses
-        state.folders.forEach((folder, folderIndex) => {
-          if (folderIndex < index) {
-            folder.status = 'completed';
-          } else if (folderIndex === index) {
-            folder.status = 'processing';
-          } else {
-            folder.status = 'pending';
-          }
-        });
-      }),
+    // Update folder statuses
+    state.folders.forEach((folder, folderIndex) => {
+      if (folderIndex < index) {
+        folder.status = 'completed';
+      } else if (folderIndex === index) {
+        folder.status = 'processing';
+      } else {
+        folder.status = 'pending';
+      }
+    });
+  });
+}
 
-    updateImageProgress: (payload) =>
-      set((state) => {
-        const folder = state.folders.find((f) => f.folderId === payload.folderId);
-        if (folder) {
-          folder.currentImageIndex = payload.currentImageIndex;
-        }
-      }),
+export function updateImageProgress(folderId: string, currentImageIndex: number) {
+  useBatchProcessStore.setState((state) => {
+    const folder = state.folders.find((f) => f.folderId === folderId);
+    if (folder) {
+      folder.currentImageIndex = currentImageIndex;
+    }
+  });
+}
 
-    markFolderExported: (payload) =>
-      set((state) => {
-        const folder = state.folders.find((f) => f.folderId === payload.folderId);
-        if (folder) {
-          folder.exportedFilePath = payload.exportedFilePath;
-        }
-      }),
+export function markFolderExported(folderId: string, exportedFilePath: string) {
+  useBatchProcessStore.setState((state) => {
+    const folder = state.folders.find((f) => f.folderId === folderId);
+    if (folder) {
+      folder.exportedFilePath = exportedFilePath;
+    }
+  });
+}
 
-    completeBatchProcess: () =>
-      set((state) => {
-        state.isProcessing = false;
-        state.overallStatus = 'completed';
-        state.currentStage = null;
-      }),
+export function completeBatchProcess() {
+  useBatchProcessStore.setState((state) => {
+    state.isProcessing = false;
+    state.overallStatus = 'completed';
+    state.currentStage = null;
+  });
+}
 
-    pauseBatchProcess: () =>
-      set((state) => {
-        state.isProcessing = false;
-        state.overallStatus = 'paused';
-      }),
+export function pauseBatchProcess() {
+  useBatchProcessStore.setState((state) => {
+    state.isProcessing = false;
+    state.overallStatus = 'paused';
+  });
+}
 
-    resumeBatchProcess: () =>
-      set((state) => {
-        state.isProcessing = true;
-        state.overallStatus = 'processing';
-      }),
+export function resumeBatchProcess() {
+  useBatchProcessStore.setState((state) => {
+    state.isProcessing = true;
+    state.overallStatus = 'processing';
+  });
+}
 
-    // Copies saved batch-progress fields (from localStorage) into the store so
-    // resumed runs show the restored folders/counters instead of stale state.
-    restoreBatchProcess: (saved) =>
-      set((state) => {
-        state.isProcessing = saved.isProcessing;
-        state.overallStatus = saved.overallStatus;
-        state.currentFolderIndex = saved.currentFolderIndex;
-        state.totalFolders = saved.totalFolders;
-        state.totalImages = saved.totalImages;
-        state.completedImages = saved.completedImages;
-        state.failedImages = saved.failedImages;
-        state.folders = saved.folders;
-        state.processingMode = saved.processingMode;
-        state.currentStage = null;
-        state.error = undefined;
-        state.startTime = undefined;
-      }),
+// Copies saved batch-progress fields (from localStorage) into the store so
+// resumed runs show the restored folders/counters instead of stale state.
+export function restoreBatchProcess(saved: BatchProcessState) {
+  useBatchProcessStore.setState((state) => {
+    state.isProcessing = saved.isProcessing;
+    state.overallStatus = saved.overallStatus;
+    state.currentFolderIndex = saved.currentFolderIndex;
+    state.totalFolders = saved.totalFolders;
+    state.totalImages = saved.totalImages;
+    state.completedImages = saved.completedImages;
+    state.failedImages = saved.failedImages;
+    state.folders = saved.folders;
+    state.processingMode = saved.processingMode;
+    state.currentStage = null;
+    state.error = undefined;
+    state.startTime = undefined;
+  });
+}
 
-    failBatchProcess: (error) =>
-      set((state) => {
-        state.isProcessing = false;
-        state.overallStatus = 'error';
-        state.error = error;
-      }),
+export function failBatchProcess(error: string) {
+  useBatchProcessStore.setState((state) => {
+    state.isProcessing = false;
+    state.overallStatus = 'error';
+    state.error = error;
+  });
+}
 
-    cancelBatchProcess: () =>
-      set((state) => {
-        state.isProcessing = false;
-        state.overallStatus = 'idle';
-        state.currentStage = null;
-      }),
+export function cancelBatchProcess() {
+  useBatchProcessStore.setState((state) => {
+    state.isProcessing = false;
+    state.overallStatus = 'idle';
+    state.currentStage = null;
+  });
+}
 
-    resetBatchProcess: () =>
-      set((state) => {
-        // Restore data fields while keeping the action functions intact
-        Object.assign(state, initialState);
-      }),
+export function resetBatchProcess() {
+  useBatchProcessStore.setState((state) => {
+    Object.assign(state, initialState);
+  });
+}
 
-    updateFilePath: (payload) =>
-      set((state) => {
-        const folder = state.folders.find((f) => f.folderId === payload.folderId);
-        if (folder) {
-          const image = folder.images.find((img) => img.fileName === payload.fileName);
-          if (image) {
-            image.filePath = payload.filePath;
-          }
-        }
-      }),
-  }))
-);
-
-// Standalone action exports (stable references). Zustand actions execute
-// immediately when called, which keeps the existing `dispatch(action(payload))`
-// call style in the migration-adapter code working unchanged.
-export const startBatchProcess = useBatchProcessStore.getState().startBatchProcess;
-export const updateFolderStatus = useBatchProcessStore.getState().updateFolderStatus;
-export const updateImageStatus = useBatchProcessStore.getState().updateImageStatus;
-export const setCurrentStage = useBatchProcessStore.getState().setCurrentStage;
-export const setCurrentFolderIndex = useBatchProcessStore.getState().setCurrentFolderIndex;
-export const updateImageProgress = useBatchProcessStore.getState().updateImageProgress;
-export const markFolderExported = useBatchProcessStore.getState().markFolderExported;
-export const completeBatchProcess = useBatchProcessStore.getState().completeBatchProcess;
-export const pauseBatchProcess = useBatchProcessStore.getState().pauseBatchProcess;
-export const resumeBatchProcess = useBatchProcessStore.getState().resumeBatchProcess;
-export const restoreBatchProcess = useBatchProcessStore.getState().restoreBatchProcess;
-export const failBatchProcess = useBatchProcessStore.getState().failBatchProcess;
-export const cancelBatchProcess = useBatchProcessStore.getState().cancelBatchProcess;
-export const resetBatchProcess = useBatchProcessStore.getState().resetBatchProcess;
-export const updateFilePath = useBatchProcessStore.getState().updateFilePath;
-
-
+export function updateFilePath(folderId: string, fileName: string, filePath: string) {
+  useBatchProcessStore.setState((state) => {
+    const folder = state.folders.find((f) => f.folderId === folderId);
+    if (folder) {
+      const image = folder.images.find((img) => img.fileName === fileName);
+      if (image) {
+        image.filePath = filePath;
+      }
+    }
+  });
+}

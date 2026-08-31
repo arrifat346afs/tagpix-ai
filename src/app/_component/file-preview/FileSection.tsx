@@ -1,6 +1,6 @@
 import { CiImageOn } from "react-icons/ci";
 import { useState, useEffect } from "react";
-import { useSettings } from "@/app/contexts/SettingsContext";
+import { useFileStore } from "@/store/fileStore";
 import { ApiCostBadge } from "./ApiCostBadge";
 
 type FileSectionProps = {
@@ -8,8 +8,8 @@ type FileSectionProps = {
 };
 
 export default function FileSection({ file }: FileSectionProps) {
-  const { thumbnails } = useSettings();
-  const thumbnailItem = thumbnails.items.find((t) => t.file === file);
+  const thumbnails = useFileStore((state) => state.thumbnails);
+  const thumbnailItem = thumbnails.find((t) => t.file === file);
   const lowResUrl = thumbnailItem?.thumbnailUrl;
 
   const [objectUrl, setObjectUrl] = useState<string | null>(null);

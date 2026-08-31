@@ -2,62 +2,54 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import type { FolderInfo } from '@/app/_component/batch/FolderInfoCard';
 
-interface BatchData {
+interface BatchState {
     folders: FolderInfo[];
 }
 
-interface BatchStore extends BatchData {
-    setFolders: (folders: FolderInfo[]) => void;
-    addFolder: (folder: FolderInfo) => void;
-    updateFolder: (payload: { id: string; updates: Partial<FolderInfo> }) => void;
-    removeFolder: (id: string) => void;
-    clearFolders: () => void;
-}
-
-const initialState: BatchData = {
+const initialState: BatchState = {
     folders: [],
 };
 
-/** Batch folder selection state (was `batchSlice` in Redux) — not persisted. */
-export const useBatchStore = create<BatchStore>()(
-    immer((set) => ({
-        ...initialState,
+/**
+ * Batch folder selection state (was `batchSlice` in Redux) — not persisted.
+ * The store holds STATE ONLY — every action is an explicit standalone
+ * function below that updates the store via setState.
+ */
+export const useBatchStore = create<BatchState>()(immer(() => initialState));
 
-        setFolders: (folders) =>
-            set((state) => {
-                state.folders = folders;
-            }),
+// ===================== Actions =====================
+// Each action is a standalone function that explicitly updates the store,
+// so components can import them directly (stable references, no hooks).
 
-        addFolder: (folder) =>
-            set((state) => {
-                state.folders.push(folder);
-            }),
+export function setFolders(folders: FolderInfo[]) {
+    useBatchStore.setState((state) => {
+        state.folders = folders;
+    });
+}
 
-        updateFolder: (payload) =>
-            set((state) => {
-                const index = state.folders.findIndex((f) => f.id === payload.id);
-                if (index !== -1) {
-                    state.folders[index] = { ...state.folders[index], ...payload.updates };
-                }
-            }),
+export function addFolder(folder: FolderInfo) {
+    useBatchStore.setState((state) => {
+        state.folders.push(folder);
+    });
+}
 
-        removeFolder: (id) =>
-            set((state) => {
-                state.folders = state.folders.filter((f) => f.id !== id);
-            }),
+export function updateFolder(id: string, updates: Partial<FolderInfo>) {
+    useBatchStore.setState((state) => {
+        const index = state.folders.findIndex((f) => f.id === id);
+        if (index !== -1) {
+            state.folders[index] = { ...state.folders[index], ...updates };
+        }
+    });
+}
 
-        clearFolders: () =>
-            set((state) => {
-                state.folders = [];
-            }),
-    }))
-);
+export function removeFolder(id: string) {
+    useBatchStore.setState((state) => {
+        state.folders = state.folders.filter((f) => f.id !== id);
+    });
+}
 
-// Standalone action exports (stable references). Zustand actions execute
-// immediately when called, which keeps the existing `dispatch(action(payload))`
-// call style in the migration-adapter code working unchanged.
-export const setFolders = useBatchStore.getState().setFolders;
-export const addFolder = useBatchStore.getState().addFolder;
-export const updateFolder = useBatchStore.getState().updateFolder;
-export const removeFolder = useBatchStore.getState().removeFolder;
-export const clearFolders = useBatchStore.getState().clearFolders;
+export function clearFolders() {
+    useBatchStore.setState((state) => {
+        state.folders = [];
+    });
+}

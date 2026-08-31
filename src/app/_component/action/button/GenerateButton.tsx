@@ -1,7 +1,17 @@
 import { useEffect, useRef } from 'react';
 import React from 'react';
 import { Button } from "@/components/ui/button";
-import { useSettings } from '@/app/contexts/SettingsContext';
+import { useFileStore, setSelectedFile, getFilePath } from '@/store/fileStore';
+import { useUiStore, setGenerationProgress, setHasAttemptedGeneration } from '@/store/uiStore';
+import { useConfigStore } from '@/store/configStore';
+import { useTemplateStore } from '@/store/templateStore';
+import {
+  useMetadataStore,
+  updateFileMetadata,
+  updateFileCategories,
+  getMetadata,
+  getCustomInstruction,
+} from '@/store/metadataStore';
 import { generateMetadata } from '@/app/lib/ai';
 import { beginGeneration, endGeneration } from '@/app/lib/generation/generationControl';
 import { CANCELLED_MESSAGE } from '@/app/lib/ai/api-client';
@@ -12,28 +22,26 @@ import { TextShimmer } from '@/components/motion-primitives/text-shimmer';
 import { Sparkle } from 'lucide-react';
 
 const GenerateButtonComponent = () => {
-  const { 
-    files, 
-    thumbnails, 
-    api, 
-    metadataLimits, 
-    metadataOptions, 
-    templateSettings,
-    embedSettings,
-    generated, 
-    setHasAttemptedGeneration, 
-    setSelectedFile, 
-    generationProgress, 
-    setGenerationProgress,
-    getFilePath 
-  } = useSettings();
+  // State (reactive zustand selectors)
+  const files = useFileStore((state) => state.files);
+  const thumbnails = useFileStore((state) => state.thumbnails);
+  const isGeneratingThumbnails = useFileStore((state) => state.isGeneratingThumbnails);
+  const api = useConfigStore((state) => state.api);
+  const metadataLimits = useConfigStore((state) => state.metadataLimits);
+  const metadataOptions = useConfigStore((state) => state.metadataOptions);
+  const embedSettings = useConfigStore((state) => state.embedSettings);
+  const activeTemplateId = useTemplateStore((state) => state.activeTemplateId);
+  const userTemplates = useTemplateStore((state) => state.userTemplates);
+  const editedDefaultTemplates = useTemplateStore((state) => state.editedDefaultTemplates);
+  const generatedMetadata = useMetadataStore((state) => state.generatedMetadata);
+  const generationProgress = useUiStore((state) => state.generationProgress);
 
   // Get active template
   const activeTemplate = getActiveTemplate(
-    templateSettings.activeTemplateId,
-    templateSettings.userTemplates,
+    activeTemplateId,
+    userTemplates,
     undefined,
-    templateSettings.editedDefaultTemplates
+    editedDefaultTemplates
   );
   const lastAutoSelectedIndexRef = useRef(-1);
   const cancelRequestedRef = useRef(false);
@@ -41,6 +49,18 @@ const GenerateButtonComponent = () => {
   const selectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isGenerating = generationProgress.isGenerating;
   
+  // Helper to check if a file already has complete metadata (title, description AND keywords all non-empty)
+  // Files with partial metadata are NOT skipped — generation produces all three fields together
+  const hasCompleteMetadata = (file: File) => {
+    const metadata = getMetadata(file);
+    return (
+      !!metadata &&
+      !!metadata.title?.trim() &&
+      !!metadata.description?.trim() &&
+      !!metadata.keywords?.trim()
+    );
+  };
+
   // Helper function to debounce file selection to avoid blocking during metadata updates
   const scheduleFileSelection = (file: File) => {
     // Store file to select
@@ -90,9 +110,16 @@ const GenerateButtonComponent = () => {
     });
     console.log(`Generating metadata for file ${index + 1}/${total}: ${item.file.name}`);
 
+    // Skip files that already have complete metadata (e.g. from a previous run or embedded EXIF)
+    // No API call is made — processing moves straight to the next file
+    if (hasCompleteMetadata(item.file)) {
+      console.log(`⏭️ Skipping ${item.file.name} (index ${index}) — complete metadata already exists`);
+      return { success: true, skipped: true };
+    }
+
     try {
       // Get custom instruction for this specific file
-      const customInstruction = generated.getCustomInstruction(item.file);
+      const customInstruction = getCustomInstruction(item.file);
       const filePath = getFilePath(item.file);
 
       const result = await generateMetadata({
@@ -123,7 +150,7 @@ const GenerateButtonComponent = () => {
 
       // Store metadata for this specific file
       console.log(`📝 Setting metadata for file at index ${index}:`, item.file.name);
-      generated.setMetadata(item.file, {
+      updateFileMetadata(item.file, {
         title: result.title,
         description: result.description,
         keywords: result.keywords,
@@ -139,13 +166,13 @@ const GenerateButtonComponent = () => {
         );
         
         console.log(`📊 Generated categories for ${item.file.name}:`, categories);
-        generated.setFileCategories(item.file, categories);
+        updateFileCategories(item.file, categories);
       } catch (error) {
         console.error(`❌ Failed to generate categories for ${item.file.name}:`, error);
       }
 
       console.log(`✓ Generated metadata for ${item.file.name} (index ${index})`);
-      console.log(`📊 Total generated items now:`, generated.items.length);
+      console.log(`📊 Total generated items now:`, generatedMetadata.length);
 
       // Embed metadata into file if enabled (skip SVG & vector formats — use CSV export)
       const isVectorFile = item.file.type === 'application/postscript' || /\.(ai|eps)$/i.test(item.file.name);
@@ -232,6 +259,8 @@ const GenerateButtonComponent = () => {
 
   // Process items sequentially (current behavior)
   const processItemsSequential = async (items: any[], provider: any, model: string | undefined, apiKey: string, useLocalModel: boolean, localModelName: string | undefined, localApiUrl: string | undefined, signal?: AbortSignal) => {
+    let skippedCount = 0;
+
     for (let i = 0; i < items.length; i++) {
       // Check if cancellation was requested
       if (signal?.aborted || cancelRequestedRef.current) {
@@ -239,18 +268,27 @@ const GenerateButtonComponent = () => {
         break;
       }
 
-      await processSingleItem(items[i], i, items.length, provider, model, apiKey, useLocalModel, localModelName, localApiUrl, signal);
+      const result = await processSingleItem(items[i], i, items.length, provider, model, apiKey, useLocalModel, localModelName, localApiUrl, signal);
+      const wasSkipped = 'skipped' in result && result.skipped;
+      if (wasSkipped) skippedCount++;
 
-      // Apply delay before next request (except for last item)
-      if (i < items.length - 1 && api.requestDelay > 0) {
+      // Apply delay before next request (except for last item, and skip it
+      // entirely when the item was skipped since no API request was made)
+      if (!wasSkipped && i < items.length - 1 && api.requestDelay > 0) {
         console.log(`⏱️ Waiting ${api.requestDelay}ms before next request...`);
         await delayWithSignal(api.requestDelay, signal);
       }
+    }
+
+    if (skippedCount > 0) {
+      console.log(`⏭️ ${skippedCount} of ${items.length} files skipped (complete metadata already exists)`);
     }
   };
 
   // Process items in parallel (similar to batchFolder system)
   const processItemsParallel = async (items: any[], workers: number, provider: any, model: string | undefined, apiKey: string, useLocalModel: boolean, localModelName: string | undefined, localApiUrl: string | undefined, signal?: AbortSignal) => {
+    let skippedCount = 0;
+
     // Process items in batches starting from the beginning
     for (let i = 0; i < items.length; i += workers) {
       // Check if cancellation was requested
@@ -270,7 +308,8 @@ const GenerateButtonComponent = () => {
         return { success: false, error: 'Cancelled' };
       });
       
-      await Promise.all(batchPromises);
+      const batchResults = await Promise.all(batchPromises);
+      skippedCount += batchResults.filter((r) => 'skipped' in r && r.skipped).length;
       
       // Update progress to show batch completion
       setGenerationProgress({
@@ -284,19 +323,23 @@ const GenerateButtonComponent = () => {
         await delayWithSignal(api.requestDelay, signal);
       }
     }
+
+    if (skippedCount > 0) {
+      console.log(`⏭️ ${skippedCount} of ${items.length} files skipped (complete metadata already exists)`);
+    }
   };
 
   const handleGenerate = async () => {
     console.log('=== Generate Button Clicked ===');
     console.log('Files in context:', files.length);
     console.log('Thumbnails context:', thumbnails);
-    console.log('Thumbnails.items length:', thumbnails.items?.length);
-    console.log('Is generating thumbnails:', thumbnails.isGenerating);
+    console.log('Thumbnails length:', thumbnails?.length);
+    console.log('Is generating thumbnails:', isGeneratingThumbnails);
 
     // Mark that user has attempted to generate metadata
     setHasAttemptedGeneration(true);
 
-    if (thumbnails.isGenerating) {
+    if (isGeneratingThumbnails) {
       alert('Please wait for thumbnails to finish generating...');
       return;
     }
@@ -306,10 +349,10 @@ const GenerateButtonComponent = () => {
       return;
     }
 
-    if (!thumbnails.items || thumbnails.items.length === 0) {
+    if (!thumbnails || thumbnails.length === 0) {
       // nothing to generate from
       console.error('❌ No thumbnails to generate metadata for');
-      console.log('Thumbnails.items:', thumbnails.items);
+      console.log('Thumbnails:', thumbnails);
       alert('No thumbnails found. Please upload images/videos first.');
       return;
     }
@@ -317,7 +360,7 @@ const GenerateButtonComponent = () => {
     // Sort thumbnails by original file order
     // This ensures we process files in same order they appear in the UI
     const sortedItems = files
-      .map(file => thumbnails.items.find(item => item.file === file))
+      .map(file => thumbnails.find(item => item.file === file))
       .filter((item): item is NonNullable<typeof item> => item !== undefined);
 
     console.log('📋 Original files order:', files.map(f => f.name));
@@ -400,7 +443,7 @@ const GenerateButtonComponent = () => {
     }
   };
 
-  const buttonText = thumbnails.isGenerating
+  const buttonText = isGeneratingThumbnails
     ? 'Generate'
     : isGenerating
     ? <TextShimmer>Generating...</TextShimmer>
@@ -410,7 +453,7 @@ const GenerateButtonComponent = () => {
     <Button
       onClick={handleGenerate}
       variant={"ghost"}
-      disabled={thumbnails.isGenerating || isGenerating}
+      disabled={isGeneratingThumbnails || isGenerating}
       className="gap-2 group h-full max-h-10 min-h-8 2xl:w-30 2xl:max-h-13 2xl:text-sm"
     >
       <Sparkle

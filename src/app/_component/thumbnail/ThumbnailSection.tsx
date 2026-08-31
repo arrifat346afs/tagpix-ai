@@ -1,6 +1,19 @@
 import { useRef, useMemo, useState, useCallback, useEffect } from "react";
-import { useSettings } from "@/app/contexts/SettingsContext";
-import { useUiStore } from "@/store/uiStore";
+import {
+  useFileStore,
+  addFiles,
+  removeFile,
+  setFilePath,
+  addThumbnail,
+} from "@/store/fileStore";
+import { useUiStore, setHasAttemptedGeneration } from "@/store/uiStore";
+import { useConfigStore } from "@/store/configStore";
+import { useTemplateStore } from "@/store/templateStore";
+import {
+  useMetadataStore,
+  updateFileMetadata as setMetadata,
+  getCustomInstruction,
+} from "@/store/metadataStore";
 import { MdOutlineImageNotSupported } from "react-icons/md";
 import { Upload } from "lucide-react";
 import { ThumbnailScrollContainer } from "./ThumbnailScrollContainer";
@@ -16,29 +29,22 @@ type ThumbnailSectionProps = {
 };
 
 const ThumbnailSection = ({ onSelectFile }: ThumbnailSectionProps) => {
-  const {
-    files,
-    thumbnails: thumbsCtx,
-    generated,
-    hasAttemptedGeneration,
-    selectedFile,
-    removeFile,
-    api,
-    metadataLimits,
-    metadataOptions,
-    templateSettings,
-    addFiles,
-    setHasAttemptedGeneration,
-    setFilePath,
-    filePaths,
-  } = useSettings();
-  
+  // State (reactive zustand selectors)
+  const files = useFileStore((state) => state.files);
+  const thumbnails = useFileStore((state) => state.thumbnails);
+  const filePaths = useFileStore((state) => state.filePaths);
+  const selectedFile = useFileStore((state) => state.selectedFile);
+  const isGeneratingThumbnails = useFileStore((state) => state.isGeneratingThumbnails);
+  const hasAttemptedGeneration = useUiStore((state) => state.hasAttemptedGeneration);
   const activeTab = useUiStore((state) => state.activeLeftTab);
+  const api = useConfigStore((state) => state.api);
+  const metadataLimits = useConfigStore((state) => state.metadataLimits);
+  const metadataOptions = useConfigStore((state) => state.metadataOptions);
+  const activeTemplateId = useTemplateStore((state) => state.activeTemplateId);
+  const userTemplates = useTemplateStore((state) => state.userTemplates);
+  const editedDefaultTemplates = useTemplateStore((state) => state.editedDefaultTemplates);
+  const generatedMetadata = useMetadataStore((state) => state.generatedMetadata);
 
-  // Stable reference: generated.setMetadata only depends on dispatch, never changes
-  const setMetadata = generated.setMetadata;
-
-  const thumbnails = thumbsCtx.items;
   const thumbnailRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -64,10 +70,10 @@ const ThumbnailSection = ({ onSelectFile }: ThumbnailSectionProps) => {
       // Generate async without blocking
       generateImageThumbnail(file, filePath).then((thumbnailUrl) => {
         if (thumbnailUrl) {
-          thumbsCtx.upsert({ file, thumbnailUrl, previewUrl: null });
+          addThumbnail({ file, thumbnailUrl, previewUrl: null });
         }
       }).catch(() => {});
-    }, [addFiles, setHasAttemptedGeneration, filePaths, thumbsCtx]),
+    }, [addFiles, setHasAttemptedGeneration, filePaths]),
     // Legacy batch fallback (used when onFileAdded is not provided)
     // Use addFiles (stable) instead of setFiles([...files, ...newFiles]) so that
     // this callback doesn't get a new reference every time `files` changes.
@@ -153,8 +159,8 @@ const ThumbnailSection = ({ onSelectFile }: ThumbnailSectionProps) => {
 
   const metadataMap = useMemo(() => {
     const map = new Map<string, boolean>();
-    if (generated.items) {
-      generated.items.forEach(item => {
+    if (generatedMetadata) {
+      generatedMetadata.forEach(item => {
         const hasContent = item.metadata.title || item.metadata.description || item.metadata.keywords;
         if (hasContent) {
           map.set(item.file.name, true);
@@ -162,7 +168,18 @@ const ThumbnailSection = ({ onSelectFile }: ThumbnailSectionProps) => {
       });
     }
     return map;
-  }, [generated.items]);
+  }, [generatedMetadata]);
+
+  // Files that have a custom instruction (reactive lookup for render path)
+  const customInstructionFiles = useMemo(() => {
+    const set = new Set<File>();
+    generatedMetadata.forEach(item => {
+      if (item.customInstruction) {
+        set.add(item.file);
+      }
+    });
+    return set;
+  }, [generatedMetadata]);
 
   // Regenerate metadata handler
   const handleRegenerate = useCallback(async (file: File) => {
@@ -182,16 +199,16 @@ const ThumbnailSection = ({ onSelectFile }: ThumbnailSectionProps) => {
       return;
     }
 
-    const customInstruction = generated.getCustomInstruction(file);
+    const customInstruction = getCustomInstruction(file);
     let customTemplate: string | undefined;
-    if (templateSettings.activeTemplateId) {
+    if (activeTemplateId) {
       // Check user templates first
-      const userTemplate = templateSettings.userTemplates.find(t => t.id === templateSettings.activeTemplateId);
+      const userTemplate = userTemplates.find(t => t.id === activeTemplateId);
       if (userTemplate) {
         customTemplate = userTemplate.template;
       } else {
         // Check edited default templates
-        const editedDefault = templateSettings.editedDefaultTemplates?.find(t => t.id === templateSettings.activeTemplateId);
+        const editedDefault = editedDefaultTemplates?.find(t => t.id === activeTemplateId);
         if (editedDefault) {
           customTemplate = editedDefault.template;
         }
@@ -221,7 +238,7 @@ const ThumbnailSection = ({ onSelectFile }: ThumbnailSectionProps) => {
         customInstruction: customInstruction,
       });
 
-      generated.setMetadata(file, {
+      setMetadata(file, {
         title: result.title,
         description: result.description,
         keywords: result.keywords,
@@ -232,7 +249,7 @@ const ThumbnailSection = ({ onSelectFile }: ThumbnailSectionProps) => {
     } finally {
       setRegeneratingFile(null);
     }
-  }, [thumbnails, api, metadataLimits, metadataOptions, generated, templateSettings]);
+  }, [thumbnails, api, metadataLimits, metadataOptions, activeTemplateId, userTemplates, editedDefaultTemplates]);
 
   // Memoize callback handlers
   const handleSelectFile = useCallback((file: File) => {
@@ -315,7 +332,7 @@ const ThumbnailSection = ({ onSelectFile }: ThumbnailSectionProps) => {
                 const isGenerating = !thumbnail;
                 const hasMetadata = metadataMap.has(file.name);
                 const isSelected = selectedFile === file;
-                const hasCustomInstruction = !!generated.getCustomInstruction(file);
+                const hasCustomInstruction = customInstructionFiles.has(file);
                 const isRegenerating = regeneratingFile === file;
 
                 return (
@@ -355,7 +372,7 @@ const ThumbnailSection = ({ onSelectFile }: ThumbnailSectionProps) => {
       )}
 
       {/* Progress indicator for large batches */}
-      {files && files.length > 50 && thumbsCtx.isGenerating && (
+      {files && files.length > 50 && isGeneratingThumbnails && (
         <div className="absolute bottom-2 right-2 bg-gray-800/90 text-white text-xs px-3 py-1 rounded-full">
           Generating thumbnails: {thumbnails.length}/{files.length}
         </div>

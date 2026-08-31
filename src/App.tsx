@@ -3,21 +3,20 @@ import { Home } from "./app/Home";
 import { Toaster } from "./components/ui/sonner";
 import Navbar from "./app/_component/navigation/Navbar";
 import { useEffect } from "react";
-import { useSettings } from "./app/contexts/SettingsContext";
+import { hasApiKey } from "./store/configStore";
+import { setSettingsDialogOpen, setSettingsDialogTab } from "./store/uiStore";
 // import { ConsoleProvider } from "./components/ConsoleContext";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { Separator } from "./components/ui/separator";
 
 
 function App() {
-  const { hasApiKey, settingsDialog } = useSettings();
-
   // Check if API key is configured on mount
   useEffect(() => {
     if (!hasApiKey()) {
       // Open settings dialog with API Keys tab selected
-      settingsDialog.setDefaultTab('apikeys');
-      settingsDialog.setIsOpen(true);
+      setSettingsDialogTab('apikeys');
+      setSettingsDialogOpen(true);
     }
   }, []); // Only run once on mount
 

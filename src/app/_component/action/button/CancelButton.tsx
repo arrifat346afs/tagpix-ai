@@ -1,12 +1,11 @@
 import { Button } from "@/components/ui/button";
-import { useSettings } from "@/app/contexts/SettingsContext";
+import { useUiStore, setGenerationProgress } from "@/store/uiStore";
 import { cancelGeneration } from "@/app/lib/generation/generationControl";
 import { X } from "lucide-react";
 import React from "react";
 
 const CancelButtonComponent = () => {
-  const { generationProgress, setGenerationProgress } = useSettings();
-  const isGenerating = generationProgress.isGenerating;
+  const isGenerating = useUiStore((state) => state.generationProgress.isGenerating);
 
   const handleCancel = () => {
     console.log('🛑 Cancel requested from CancelButton');

@@ -1,18 +1,21 @@
 import { Button } from "@/components/ui/button";
-import { useSettings } from "@/app/contexts/SettingsContext";
 import { useState } from "react";
 import React from "react";
 import { toast } from "sonner";
 import { exportToMultipleFormats } from "@/app/lib/export/exportUtils";
 // import { Download } from "lucide-react";
 import { DownloadIcon } from "@/components/ui/download";
+import { useMetadataStore } from "@/store/metadataStore";
+import { useConfigStore } from "@/store/configStore";
 
 function ExportButtonComponent() {
-  const { generated, categories, exportSettings } = useSettings();
+  const generatedMetadata = useMetadataStore((state) => state.generatedMetadata);
+  const categories = useMetadataStore((state) => state.defaultCategories);
+  const exportSettings = useConfigStore((state) => state.exportSettings);
   const [isExporting, setIsExporting] = useState(false);
 
   const handleExport = async () => {
-    if (generated.items.length === 0) {
+    if (generatedMetadata.length === 0) {
       toast.error("No metadata to export. Please generate metadata first.");
       return;
     }
@@ -28,11 +31,11 @@ function ExportButtonComponent() {
 
     setIsExporting(true);
     try {
-      await exportToMultipleFormats(generated.items, categories, selectedFormats);
-      const formatNames = selectedFormats.map(format => 
+      await exportToMultipleFormats(generatedMetadata, categories, selectedFormats);
+      const formatNames = selectedFormats.map(format =>
         format === 'adobeStock' ? 'Adobe Stock' : 'Shutterstock'
       ).join(', ');
-      toast.success(`Successfully exported ${generated.items.length} items to ${formatNames}!`);
+      toast.success(`Successfully exported ${generatedMetadata.length} items to ${formatNames}!`);
     } catch (error) {
       console.error("Export failed:", error);
       toast.error(`Export failed: ${error}`);
@@ -48,7 +51,7 @@ function ExportButtonComponent() {
       <Button
         variant="ghost"
         onClick={handleExport}
-        disabled={isExporting || generated.items.length === 0 || selectedFormatsCount === 0}
+        disabled={isExporting || generatedMetadata.length === 0 || selectedFormatsCount === 0}
         className="gap-2 group h-full max-h-10 min-h-8 2xl:w-30 2xl:max-h-13 2xl:text-sm"
       >
         <DownloadIcon className="2xl:text-sm" />

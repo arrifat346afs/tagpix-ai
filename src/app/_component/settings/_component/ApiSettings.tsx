@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSettings } from '@/app/contexts/SettingsContext';
+import { useConfigStore, setSelectedProvider, setSelectedModel, setRequestDelay, setParallelWorkers, setUseLocalModel, setLocalModelName, setLocalApiUrl, setProcessingMode } from '@/store/configStore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,7 +13,7 @@ import { ModelSelector } from './ModelSelector';
 type Provider = 'openai' | 'gemini' | 'mistral' | 'groq' | 'openrouter';
 
 const ApiSettings = () => {
-  const { api } = useSettings();
+  const api = useConfigStore((state) => state.api);
 
   // Local state for unsaved changes
   const [localProvider, setLocalProvider] = useState<Provider | ''>(api.selectedProvider);
@@ -146,14 +146,14 @@ const ApiSettings = () => {
   }, [localProvider, localApiKeys]);
 
   const handleSave = () => {
-    // Save all changes to context (except processing mode which is applied immediately)
-    api.setSelectedProvider(localProvider);
-    api.setSelectedModel(localModel);
-    api.setRequestDelay(localRequestDelay);
-    api.setParallelWorkers(localParallelWorkers);
-    api.setUseLocalModel(localUseLocalModel);
-    api.setLocalModelName(localLocalModelName);
-    api.setLocalApiUrl(localLocalApiUrl);
+    // Save all changes to store (except processing mode which is applied immediately)
+    setSelectedProvider(localProvider);
+    setSelectedModel(localModel);
+    setRequestDelay(localRequestDelay);
+    setParallelWorkers(localParallelWorkers);
+    setUseLocalModel(localUseLocalModel);
+    setLocalModelName(localLocalModelName);
+    setLocalApiUrl(localLocalApiUrl);
 
     toast.success('Settings saved successfully!');
 
@@ -232,7 +232,7 @@ const ApiSettings = () => {
           checked={localUseLocalModel}
           onCheckedChange={(checked) => {
             setLocalUseLocalModel(checked);
-            api.setUseLocalModel(checked);
+            setUseLocalModel(checked);
             toast.success(checked ? 'Switched to local model' : 'Switched to API model');
           }}
         />
@@ -314,7 +314,7 @@ const ApiSettings = () => {
                   onCheckedChange={(checked) => {
                     const newMode = checked ? 'parallel' : 'sequential';
                     setLocalProcessingMode(newMode);
-                    api.setProcessingMode(newMode);
+                    setProcessingMode(newMode);
                     toast.success(`Processing mode changed to ${newMode}`);
                   }}
                 />
@@ -424,7 +424,7 @@ const ApiSettings = () => {
                   onCheckedChange={(checked) => {
                     const newMode = checked ? 'parallel' : 'sequential';
                     setLocalProcessingMode(newMode);
-                    api.setProcessingMode(newMode); // Apply immediately
+                    setProcessingMode(newMode); // Apply immediately
                     toast.success(`Processing mode changed to ${newMode}`);
                   }}
                 />

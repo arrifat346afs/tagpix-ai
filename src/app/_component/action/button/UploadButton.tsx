@@ -1,12 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import React from "react";
-import { useSettings } from "@/app/contexts/SettingsContext";
 import { UploadIcon } from "@/components/ui/upload";
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from "@tauri-apps/plugin-fs";
 import { readExifMetadata } from "@/app/lib/tauri/tauri-commands";
 import { VECTOR_MIME_TYPE } from "@/app/lib/thumbnail/vectorSupport";
+import { setFiles, addFiles, setFilePath } from "@/store/fileStore";
+import { setHasAttemptedGeneration } from "@/store/uiStore";
+import { updateFileMetadata } from "@/store/metadataStore";
 
 // Convert a file path to a File object with proper MIME type
 // For videos, we create a lightweight File without loading content (backend reads from path)
@@ -42,7 +44,6 @@ const UPLOAD_CONCURRENCY = 5;
 
 const UploadButtonComponent = ({ }: UploadButtonProps) => {
   const [isHovered, setIsHovered] = useState(false);
-  const { setHasAttemptedGeneration, setFilePath, generated, setFiles, addFiles } = useSettings();
 
   const handleClick = async () => {
     console.log("🖱️  Upload button clicked - opening Tauri file dialog");
@@ -93,7 +94,7 @@ const UploadButtonComponent = ({ }: UploadButtonProps) => {
       if (file.type !== 'image/svg+xml') {
         readExifMetadata(path).then(exifData => {
           if (exifData.title || exifData.description || exifData.keywords) {
-            generated.setMetadata(file, {
+            updateFileMetadata(file, {
               title: exifData.title || '',
               description: exifData.description || '',
               keywords: exifData.keywords || ''
@@ -121,7 +122,7 @@ const UploadButtonComponent = ({ }: UploadButtonProps) => {
       
       readExifMetadata(path).then(exifData => {
         if (exifData.title || exifData.description || exifData.keywords) {
-          generated.setMetadata(file, {
+          updateFileMetadata(file, {
             title: exifData.title || '',
             description: exifData.description || '',
             keywords: exifData.keywords || ''

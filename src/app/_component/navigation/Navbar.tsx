@@ -12,7 +12,7 @@ import {
 import { ItemMedia } from "@/components/ui/item";
 import logo from "../../../assets/descify.svg";
 import { useEffect, useState } from "react";
-import { useSettings } from "@/app/contexts/SettingsContext";
+import { useUiStore, setSettingsDialogOpen } from "@/store/uiStore";
 import { ThemeToggle } from "@/components/mode-toggle";
 import { UpdateChecker } from "@/components/UpdateChecker";
 // import { ConsolePopover } from "../ConsolePopover";
@@ -20,7 +20,7 @@ import { UpdateChecker } from "@/components/UpdateChecker";
 const Navbar = () => {
   const appWindow = getCurrentWindow();
   const [isMaximized, setIsMaximized] = useState(false);
-  const { settingsDialog } = useSettings();
+  const isSettingsOpen = useUiStore((state) => state.settingsDialog.isOpen);
 
   useEffect(() => {
     // Check initial maximized state
@@ -60,8 +60,8 @@ const Navbar = () => {
         </div>
         <div className="flex justify-center items-center">
           <Dialog
-            open={settingsDialog.isOpen}
-            onOpenChange={settingsDialog.setIsOpen}
+            open={isSettingsOpen}
+            onOpenChange={setSettingsDialogOpen}
           >
             <DialogTrigger asChild>
               <Button variant={"ghost"} className="cursor-pointer">

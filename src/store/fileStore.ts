@@ -7,7 +7,7 @@ export type ThumbnailData = {
     previewUrl?: string | null;
 };
 
-interface FileData {
+interface FileState {
     files: File[];
     filePaths: Map<File, string>;
     thumbnails: ThumbnailData[];
@@ -16,22 +16,7 @@ interface FileData {
     selectedFile: File | null;
 }
 
-interface FileStore extends FileData {
-    setFiles: (files: File[]) => void;
-    addFiles: (files: File[]) => void;
-    removeFile: (file: File) => void;
-    setFilePath: (payload: { file: File; path: string }) => void;
-    setFilePaths: (paths: Map<File, string>) => void;
-    setThumbnails: (thumbnails: ThumbnailData[]) => void;
-    addThumbnail: (thumbnail: ThumbnailData) => void;
-    setIsGeneratingThumbnails: (generating: boolean) => void;
-    setPendingThumbnailCount: (count: number) => void;
-    setSelectedFile: (file: File | null) => void;
-    clearThumbnails: () => void;
-    upsertThumbnails: (items: ThumbnailData[]) => void;
-}
-
-const initialState: FileData = {
+const initialState: FileState = {
     files: [],
     filePaths: new Map(),
     thumbnails: [],
@@ -45,113 +30,118 @@ const initialState: FileData = {
  * Not persisted — unlike Redux, Zustand has no serializability middleware, so
  * `File` objects and `Map`s can live here directly. Requires immer's
  * `enableMapSet()` (called in `src/store/init.ts`) for Map drafts.
+ * The store holds STATE ONLY — every action is an explicit standalone
+ * function below that updates the store via setState.
  */
-export const useFileStore = create<FileStore>()(
-    immer((set) => ({
-        ...initialState,
+export const useFileStore = create<FileState>()(immer(() => initialState));
 
-        setFiles: (files) =>
-            set((state) => {
-                state.files = files;
-            }),
+// ===================== Actions =====================
+// Each action is a standalone function that explicitly updates the store,
+// so components can import them directly (stable references, no hooks).
 
-        addFiles: (files) =>
-            set((state) => {
-                state.files.push(...files);
-            }),
+export function setFiles(files: File[]) {
+    useFileStore.setState((state) => {
+        state.files = files;
+    });
+}
 
-        removeFile: (file) =>
-            set((state) => {
-                state.files = state.files.filter((f) => f !== file);
-                state.thumbnails = state.thumbnails.filter((t) => t.file !== file);
-                state.filePaths.delete(file);
-                if (state.selectedFile === file) {
-                    state.selectedFile = null;
-                }
-            }),
+export function addFiles(files: File[]) {
+    useFileStore.setState((state) => {
+        state.files.push(...files);
+    });
+}
 
-        setFilePath: (payload) =>
-            set((state) => {
-                state.filePaths.set(payload.file, payload.path);
-            }),
+export function removeFile(file: File) {
+    useFileStore.setState((state) => {
+        state.files = state.files.filter((f) => f !== file);
+        state.thumbnails = state.thumbnails.filter((t) => t.file !== file);
+        state.filePaths.delete(file);
+        if (state.selectedFile === file) {
+            state.selectedFile = null;
+        }
+    });
+}
 
-        setFilePaths: (paths) =>
-            set((state) => {
-                state.filePaths = paths;
-            }),
+export function setFilePath(file: File, path: string) {
+    useFileStore.setState((state) => {
+        state.filePaths.set(file, path);
+    });
+}
 
-        setThumbnails: (thumbnails) =>
-            set((state) => {
-                state.thumbnails = thumbnails;
-            }),
+export function setFilePaths(paths: Map<File, string>) {
+    useFileStore.setState((state) => {
+        state.filePaths = paths;
+    });
+}
 
-        addThumbnail: (thumbnail) =>
-            set((state) => {
-                // Check if exists
-                const index = state.thumbnails.findIndex((t) => t.file === thumbnail.file);
-                if (index !== -1) {
-                    state.thumbnails[index] = thumbnail;
-                } else {
-                    state.thumbnails.push(thumbnail);
-                }
-            }),
+export function setThumbnails(thumbnails: ThumbnailData[]) {
+    useFileStore.setState((state) => {
+        state.thumbnails = thumbnails;
+    });
+}
 
-        setIsGeneratingThumbnails: (generating) =>
-            set((state) => {
-                state.isGeneratingThumbnails = generating;
-            }),
+export function addThumbnail(thumbnail: ThumbnailData) {
+    useFileStore.setState((state) => {
+        // Check if exists
+        const index = state.thumbnails.findIndex((t) => t.file === thumbnail.file);
+        if (index !== -1) {
+            state.thumbnails[index] = thumbnail;
+        } else {
+            state.thumbnails.push(thumbnail);
+        }
+    });
+}
 
-        setPendingThumbnailCount: (count) =>
-            set((state) => {
-                state.pendingThumbnailCount = count;
-            }),
+export function setIsGeneratingThumbnails(generating: boolean) {
+    useFileStore.setState((state) => {
+        state.isGeneratingThumbnails = generating;
+    });
+}
 
-        setSelectedFile: (file) =>
-            set((state) => {
-                state.selectedFile = file;
-            }),
+export function setPendingThumbnailCount(count: number) {
+    useFileStore.setState((state) => {
+        state.pendingThumbnailCount = count;
+    });
+}
 
-        clearThumbnails: () =>
-            set((state) => {
-                state.thumbnails = [];
-                state.pendingThumbnailCount = 0;
-                state.isGeneratingThumbnails = false;
-            }),
+export function setSelectedFile(file: File | null) {
+    useFileStore.setState((state) => {
+        state.selectedFile = file;
+    });
+}
 
-        // Bulk action for efficient batch updates - O(N) instead of O(N²)
-        upsertThumbnails: (items) =>
-            set((state) => {
-                if (items.length === 0) return;
+export function clearThumbnails() {
+    useFileStore.setState((state) => {
+        state.thumbnails = [];
+        state.pendingThumbnailCount = 0;
+        state.isGeneratingThumbnails = false;
+    });
+}
 
-                // Build index map for O(1) lookups
-                const fileToIndex = new Map<File, number>();
-                state.thumbnails.forEach((t, i) => fileToIndex.set(t.file, i));
+// Bulk action for efficient batch updates - O(N) instead of O(N²)
+export function upsertThumbnails(items: ThumbnailData[]) {
+    useFileStore.setState((state) => {
+        if (items.length === 0) return;
 
-                items.forEach((item) => {
-                    const existingIndex = fileToIndex.get(item.file);
-                    if (existingIndex !== undefined) {
-                        state.thumbnails[existingIndex] = item;
-                    } else {
-                        state.thumbnails.push(item);
-                        fileToIndex.set(item.file, state.thumbnails.length - 1);
-                    }
-                });
-            }),
-    }))
-);
+        // Build index map for O(1) lookups
+        const fileToIndex = new Map<File, number>();
+        state.thumbnails.forEach((t, i) => fileToIndex.set(t.file, i));
 
-// Standalone action exports (stable references). Zustand actions execute
-// immediately when called, which keeps the existing `dispatch(action(payload))`
-// call style in the migration-adapter code working unchanged.
-export const setFiles = useFileStore.getState().setFiles;
-export const addFiles = useFileStore.getState().addFiles;
-export const removeFile = useFileStore.getState().removeFile;
-export const setFilePath = useFileStore.getState().setFilePath;
-export const setFilePaths = useFileStore.getState().setFilePaths;
-export const setThumbnails = useFileStore.getState().setThumbnails;
-export const addThumbnail = useFileStore.getState().addThumbnail;
-export const setIsGeneratingThumbnails = useFileStore.getState().setIsGeneratingThumbnails;
-export const setPendingThumbnailCount = useFileStore.getState().setPendingThumbnailCount;
-export const setSelectedFile = useFileStore.getState().setSelectedFile;
-export const clearThumbnails = useFileStore.getState().clearThumbnails;
-export const upsertThumbnails = useFileStore.getState().upsertThumbnails;
+        items.forEach((item) => {
+            const existingIndex = fileToIndex.get(item.file);
+            if (existingIndex !== undefined) {
+                state.thumbnails[existingIndex] = item;
+            } else {
+                state.thumbnails.push(item);
+                fileToIndex.set(item.file, state.thumbnails.length - 1);
+            }
+        });
+    });
+}
+
+// ===================== Non-reactive helpers =====================
+
+/** Look up a file's stored path without subscribing to the store. */
+export function getFilePath(file: File): string | undefined {
+    return useFileStore.getState().filePaths.get(file);
+}

@@ -7,16 +7,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useSettings } from "@/app/contexts/SettingsContext";
+import { useFileStore } from "@/store/fileStore";
+import {
+  useMetadataStore,
+  updateFileCategories,
+  getMetadata,
+  setDefaultCategories,
+} from "@/store/metadataStore";
 import { matchCategories } from "@/app/lib/metadata/categoryMatcher";
 
 export const CategorySection = () => {
-  const { categories, setCategories, selectedFile, generated } = useSettings();
+  // State (reactive zustand selectors)
+  const selectedFile = useFileStore((state) => state.selectedFile);
+  const categories = useMetadataStore((state) => state.defaultCategories);
+  const generatedMetadata = useMetadataStore((state) => state.generatedMetadata);
   const lastProcessedFileRef = useRef<File | null>(null);
 
   // Get current file's categories or use global categories as fallback
   const currentCategories = selectedFile
-    ? generated.getCategories(selectedFile) || categories
+    ? generatedMetadata.find((m) => m.file === selectedFile)?.categories || categories
     : categories;
 
   // Auto-populate categories when a file with metadata is selected
@@ -27,8 +36,8 @@ export const CategorySection = () => {
         return;
       }
 
-      const metadata = generated.getMetadata(selectedFile);
-      const existingCategories = generated.getCategories(selectedFile);
+      const metadata = getMetadata(selectedFile);
+      const existingCategories = generatedMetadata.find((m) => m.file === selectedFile)?.categories;
 
       // Only auto-match if we don't have categories for this file yet
       if (
@@ -46,29 +55,29 @@ export const CategorySection = () => {
         );
 
         console.log("📊 Category matches:", matches);
-        generated.setFileCategories(selectedFile, matches);
-        setCategories(matches); // Also update global state for UI
+        updateFileCategories(selectedFile, matches);
+        setDefaultCategories(matches); // Also update global state for UI
 
         // Mark this file as processed
         lastProcessedFileRef.current = selectedFile;
       } else if (existingCategories) {
         // Load existing categories into global state for UI
-        setCategories(existingCategories);
+        setDefaultCategories(existingCategories);
         lastProcessedFileRef.current = selectedFile;
       } else {
         console.log("⏳ Waiting for metadata for:", selectedFile.name);
       }
     }
-  }, [selectedFile, generated, setCategories]);
+  }, [selectedFile, generatedMetadata]);
 
   const handleCategoryChange = (
     categoryType: "adobeStock" | "shutterStock1" | "shutterStock2",
     value: string
   ) => {
     const newCategories = { [categoryType]: value };
-    setCategories(newCategories); // Update global state for UI
+    setDefaultCategories(newCategories); // Update global state for UI
     if (selectedFile) {
-      generated.setFileCategories(selectedFile, newCategories); // Save to file-specific storage
+      updateFileCategories(selectedFile, newCategories); // Save to file-specific storage
     }
   };
 

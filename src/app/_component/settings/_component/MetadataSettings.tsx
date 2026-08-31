@@ -1,16 +1,17 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
-import { useSettings } from '@/app/contexts/SettingsContext'
+import { useConfigStore, setMetadataLimits, setMetadataOptions } from '@/store/configStore'
 import { AvoidWordsTextarea } from './AvoidWordsTextarea';
 // import { readFile } from '@tauri-apps/plugin-fs';
 // import * as path from '@tauri-apps/api/path';
 
 const MetadataSettings = () => {
-  const { metadataLimits, metadataOptions } = useSettings();
+  const metadataLimits = useConfigStore((state) => state.metadataLimits);
+  const metadataOptions = useConfigStore((state) => state.metadataOptions);
 
   const handleReset = () => {
-    metadataLimits.setLimits({
+    setMetadataLimits({
       titleLimit: 200,
       descriptionLimit: 200,
       keywordLimit: 80,
@@ -31,7 +32,7 @@ const MetadataSettings = () => {
             type="number"
             value={metadataLimits.titleLimit}
             onChange={(e) =>
-              metadataLimits.setLimits({ titleLimit: parseInt(e.target.value || '1') })
+              setMetadataLimits({ titleLimit: parseInt(e.target.value || '1') })
             }
             min={1}
             placeholder="e.g., 200"
@@ -40,7 +41,7 @@ const MetadataSettings = () => {
             label="Title Avoid Words"
             avoidWords={metadataOptions.titleAvoidWords}
             onAvoidWordsChange={(words) =>
-              metadataOptions.setOptions({ titleAvoidWords: words })
+              setMetadataOptions({ titleAvoidWords: words })
             }
             placeholder="Enter words to avoid in titles (comma-separated)"
           />
@@ -53,7 +54,7 @@ const MetadataSettings = () => {
           <Input
             type="number"
             value={metadataLimits.descriptionLimit}
-            onChange={(e) => metadataLimits.setLimits({ descriptionLimit: parseInt(e.target.value || '1') })}
+            onChange={(e) => setMetadataLimits({ descriptionLimit: parseInt(e.target.value || '1') })}
             min={1}
             placeholder="e.g., 200"
           />
@@ -61,7 +62,7 @@ const MetadataSettings = () => {
             label="Description Avoid Words"
             avoidWords={metadataOptions.descriptionAvoidWords}
             onAvoidWordsChange={(words) =>
-              metadataOptions.setOptions({ descriptionAvoidWords: words })
+              setMetadataOptions({ descriptionAvoidWords: words })
             }
             placeholder="Enter words to avoid in descriptions (comma-separated)"
           />
@@ -75,7 +76,7 @@ const MetadataSettings = () => {
 
             type="number"
             value={metadataLimits.keywordLimit}
-            onChange={(e) => metadataLimits.setLimits({ keywordLimit: parseInt(e.target.value || '1') })}
+            onChange={(e) => setMetadataLimits({ keywordLimit: parseInt(e.target.value || '1') })}
             min={1}
             placeholder="e.g., 80"
           />
@@ -83,7 +84,7 @@ const MetadataSettings = () => {
             label="Keywords Avoid Words"
             avoidWords={metadataOptions.keywordsAvoidWords}
             onAvoidWordsChange={(words) =>
-              metadataOptions.setOptions({ keywordsAvoidWords: words })
+              setMetadataOptions({ keywordsAvoidWords: words })
             }
             placeholder="Enter words to avoid in keywords (comma-separated)"
           />
@@ -108,7 +109,7 @@ const MetadataSettings = () => {
           <Switch
             checked={metadataOptions.includePlaceName}
             onCheckedChange={(checked) =>
-              metadataOptions.setOptions({ includePlaceName: checked })
+              setMetadataOptions({ includePlaceName: checked })
             }
           />
         </div>
@@ -124,7 +125,7 @@ const MetadataSettings = () => {
           <Switch
             checked={metadataOptions.autoSelectGenerated}
             onCheckedChange={(checked) =>
-              metadataOptions.setOptions({ autoSelectGenerated: checked })
+              setMetadataOptions({ autoSelectGenerated: checked })
             }
           />
         </div>
