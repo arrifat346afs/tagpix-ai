@@ -6,7 +6,7 @@
   <h1 align="center">Descify</h1>
 
   <p align="center">
-    AI-powered batch metadata generator for images
+    AI-powered batch metadata generator for images — cloud APIs or <b>100% local models</b>
   </p>
 
   <p align="center">
@@ -22,13 +22,15 @@
 
 Descify is a cross-platform desktop application that **generates titles, keywords, and descriptions for images in batch** using AI models. Built with Tauri, React, and TypeScript, it streamlines metadata workflows for stock photographers, e-commerce catalogs, and content managers.
 
+It works with **cloud AI providers** (Gemini, OpenRouter) **and with fully local models** via [LM Studio](https://lmstudio.ai/) — so your images and prompts never have to leave your machine.
+
 ![Screenshot](img/app.png)
 
 ## Features
 
 ### AI Integration
 - **Gemini** (free tier available) and **OpenRouter** (paid) support
--Supports local AI models via LM Studio (optional).
+- 🏠 **Local model support** — run vision models entirely on your own machine via LM Studio (or any OpenAI-compatible server). No API key, no cost, no data leaving your device — see [Local Models](#local-models-lm-studio) below
 - Configurable AI prompt templates with variables (`${titleLimit}`, `${descriptionLimit}`, `${keywordLimit}`, `${fileName}`, `${currentDate}`)
 - Built-in preset templates for **Stock Photo**, **Product Catalog**, and **Social Media**
 - Create and save custom templates with custom instructions
@@ -46,6 +48,21 @@ Descify is a cross-platform desktop application that **generates titles, keyword
 - Secure API key storage (Gemini & OpenRouter)
 - Category tagging and organization
 - Metadata export and embedding
+
+## Local Models (LM Studio)
+
+> [!TIP]
+> Descify supports **running AI models locally** — great for privacy, offline work, and avoiding API costs entirely.
+
+1. Download and install [LM Studio](https://lmstudio.ai/)
+2. In LM Studio, download a **vision-capable** model (e.g. Qwen2.5-VL, or any model with a "vision" capability) and start the local server
+3. Open Descify's Settings, enable the local model option, and point it to your server (default: `http://localhost:1234` — the `/v1` suffix is added automatically)
+4. Pick your model from the list and start generating — no API key required
+
+Notes:
+- Works with any **OpenAI-compatible** local server, not just LM Studio
+- Only **vision-capable** models can describe images (LM Studio shows a "vision" capability badge on supported models)
+- Locally hosted models are well suited to **parallel processing** — tune the number of parallel workers and request delay in Settings to match your hardware
 
 ## Getting Started
 
@@ -80,9 +97,9 @@ pnpm run tauri build
 
 ## Usage
 
-1. **Configure API Keys** — Open Settings and add your Gemini or OpenRouter key
+1. **Choose Your Provider** — Either add your Gemini/OpenRouter API key in Settings, or enable a local model via LM Studio (no key needed)
 2. **Import Images** — Use the Upload button to select one or more images
-3. **Select Mode** — Choose Sequential (free APIs) or Parallel (paid APIs)
+3. **Select Mode** — Choose Sequential (free APIs) or Parallel (paid APIs or local models)
 4. **Generate** — Click Generate to produce AI-powered metadata
 5. **Review & Save** — Edit results, save metadata, or export
 
@@ -94,7 +111,7 @@ pnpm run tauri build
 | Frontend | [React](https://react.dev/) 18 + [TypeScript](https://www.typescriptlang.org/) 5.6 |
 | Bundler | [Vite](https://vitejs.dev/) |
 | Styling | [Tailwind CSS](https://tailwindcss.com/) 4 + [Radix UI](https://www.radix-ui.com/) |
-| AI SDK | [Vercel AI SDK](https://sdk.vercel.ai/) (Google & OpenRouter providers) |
+| AI SDK | [Vercel AI SDK](https://sdk.vercel.ai/) (Google & OpenRouter providers, plus any OpenAI-compatible local server) |
 | State | [Redux Toolkit](https://redux-toolkit.js.org/) |
 | Backend (Rust) | Tauri commands for file I/O, ExifTool, and OS integration |
 
@@ -115,7 +132,7 @@ Descify/
 ## API Keys
 
 > [!WARNING]
-> OpenAI is not supported. The project uses Gemini (free) and OpenRouter (paid).
+> OpenAI is not supported because it's closeAI. The project uses Gemini (free) and OpenRouter (paid). Alternatively, run **local models** via [LM Studio](#local-models-lm-studio) — no API key required at all.
 
 | Service | Get Key |
 |---------|---------|
