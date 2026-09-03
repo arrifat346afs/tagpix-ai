@@ -36,8 +36,8 @@
         "@tauri-apps/plugin-upload": "~2.3.2",
         "ai": "^6.0.188",
         "class-variance-authority": "^0.7.1",
-        "clsx": "^2.1.1",
         "cmdk": "^1.1.1",
+        "cn": "^0.2.4",
         "exiftool-vendored": "^33.5.0",
         "fs": "^0.0.1-security",
         "gemini": "^7.5.2",
@@ -53,7 +53,6 @@
         "shadcn": "^4.8.0",
         "smooth-scroll-into-view-if-needed": "^2.0.2",
         "sonner": "^2.0.7",
-        "tailwind-merge": "^3.6.0",
         "tailwindcss": "^4.3.0",
         "thumbo": "^1.0.8",
         "zustand": "^5.0.15",
@@ -691,6 +690,8 @@
     "clsx": ["clsx@2.1.1", "", {}, "sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA=="],
 
     "cmdk": ["cmdk@1.1.1", "", { "dependencies": { "@radix-ui/react-compose-refs": "^1.1.1", "@radix-ui/react-dialog": "^1.1.6", "@radix-ui/react-id": "^1.1.0", "@radix-ui/react-primitive": "^2.0.2" }, "peerDependencies": { "react": "^18 || ^19 || ^19.0.0-rc", "react-dom": "^18 || ^19 || ^19.0.0-rc" } }, "sha512-Vsv7kFaXm+ptHDMZ7izaRsP70GgrW9NBNGswt9OZaVBLlE0SNpDq8eu/VGXyF9r7M0azK3Wy7OlYXsuyYLFzHg=="],
+
+    "cn": ["cn@0.2.4", "", { "bin": { "cn": "bin/cn.mjs" } }, "sha512-SzQvoh5FwizWtQg9+JueKdjWhlfCZMdu5DqNHm9q1wUlRVmKb9WXlepR9bTTbPwzEOyX1ujJ6lcCppmn3bNUCg=="],
 
     "coa": ["coa@1.0.4", "", { "dependencies": { "q": "^1.1.2" } }, "sha512-KAGck/eNAmCL0dcT3BiuYwLbExK6lduR8DxM3C1TyDzaXhZHyZ8ooX5I5+na2e3dPFuibfxrGdorr0/Lr7RYCQ=="],
 
