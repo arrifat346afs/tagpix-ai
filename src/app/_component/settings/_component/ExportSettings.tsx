@@ -24,13 +24,12 @@ const ExportSettings = () => {
     localStorage.setItem("exportPath", path);
   }
   const handleFileSelect = async () => {
-    // Implement file selection logic here
     try {
-      console.log('File select clicked');
       const selectedDir = await open({ directory: true, multiple: false });
-      console.log('Selected directory:', selectedDir);
-      setSelectedDirectory(selectedDir as string | undefined);
-      savePath(selectedDir as string);
+      if (typeof selectedDir === 'string' && selectedDir.length > 0) {
+        setSelectedDirectory(selectedDir);
+        savePath(selectedDir);
+      }
     } catch (error) {
       console.error('Failed to open path:', error);
 
@@ -105,7 +104,7 @@ const ExportSettings = () => {
             />
             <Button
               variant="outline"
-              className="w-30"
+              className="w-28"
               onClick={handleFileSelect}
             >
               Browse
