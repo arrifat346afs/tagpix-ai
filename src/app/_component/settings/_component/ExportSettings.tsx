@@ -26,8 +26,10 @@ const ExportSettings = () => {
   const handleFileSelect = async () => {
     try {
       const selectedDir = await open({ directory: true, multiple: false });
-      setSelectedDirectory(selectedDir as string | undefined);
-      savePath(selectedDir as string);
+      if (typeof selectedDir === 'string' && selectedDir.length > 0) {
+        setSelectedDirectory(selectedDir);
+        savePath(selectedDir);
+      }
     } catch (error) {
       console.error('Failed to open path:', error);
 
